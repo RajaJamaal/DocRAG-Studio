@@ -6,7 +6,7 @@ export type RAGResult = {
   raw?: any;
 };
 
-function buildPrompt(query: string, contexts: Array<{ pageContent: string; metadata?: any }>) {
+export function buildPrompt(query: string, contexts: Array<{ pageContent: string; metadata?: any }>) {
   const contextText = contexts
     .map((c, i) => `[[source:${i}]]\n${c.pageContent}\n`)
     .join("\n---\n");
