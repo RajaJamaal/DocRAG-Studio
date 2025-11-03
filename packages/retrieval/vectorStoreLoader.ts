@@ -99,3 +99,6 @@ export async function loadLocalVectorStore(): Promise<RetrieverLike> {
     },
   };
 }
+
+// Modular vector store loader: local JSON (default), easy swap for Pinecone/Chroma
+// To swap to Pinecone/Chroma, replace loadLocalVectorStore with provider-specific logic and update .env
