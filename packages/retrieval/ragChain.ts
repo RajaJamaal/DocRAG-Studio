@@ -5,6 +5,7 @@ export type RAGResult = {
   sources: Array<{ title?: string; id?: string; snippet?: string }>;
   raw?: any;
   parsed?: any;
+};
 
 export function buildPrompt(query: string, contexts: Array<{ pageContent: string; metadata?: any }>) {
   const contextText = contexts
