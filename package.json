@@ -1,0 +1,20 @@
+{
+  "name": "docrag-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ingest": "NODE_OPTIONS=\"--loader ts-node/esm\" ts-node -r dotenv/config packages/ingestion/runIngest.ts",
+    "dev": "echo \"Start frontend and backend separately (see README)\""
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.4.22"
+  },
+  "devDependencies": {
+    "ts-node": "^10.0.0",
+    "typescript": "^5.0.0",
+    "@types/node": "^18.0.0"
+  }
+}
