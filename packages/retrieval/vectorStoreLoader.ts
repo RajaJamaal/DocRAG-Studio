@@ -1,8 +1,7 @@
 import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
-import { Pinecone } from "@pinecone-database/pinecone";
-import { ChromaClient, CloudClient } from "chromadb";
+// Do not use static imports for Pinecone/Chroma to avoid runtime/type errors in environments where not installed
 
 export type DocumentLike = {
   id?: string;
@@ -105,50 +104,57 @@ async function loadLocalVectorStore(): Promise<RetrieverLike> {
 
 // Pinecone Vector Store Implementation
 async function loadPineconeVectorStore(): Promise<RetrieverLike> {
+  // Dynamic import for compatibility
+  const pineconeModule = await import("@pinecone-database/pinecone");
+  const Pinecone = pineconeModule.Pinecone;
   const pinecone = new Pinecone({
     apiKey: process.env.PINECONE_API_KEY!,
   });
-
-  const index = pinecone.index(process.env.PINECONE_INDEX!);
-
+  const index = pinecone.Index(process.env.PINECONE_INDEX!, process.env.PINECONE_ENVIRONMENT || "us-east1-gcp");
   return {
     similaritySearch: async (query: string, k = 3) => {
       const queryEmbedding = embedTextDeterministic(query);
-      
       const results = await index.query({
         vector: queryEmbedding,
         topK: k,
         includeMetadata: true,
       });
-
-      return results.matches.map((match) => ({
+      return results.matches.map((match: any) => ({
         id: match.id,
-        pageContent: match.metadata?.text as string,
-        metadata: match.metadata,
+        pageContent: match.metadata?.text || "",
+        metadata: match.metadata || {},
       }));
     },
   };
 }
 
-// Chroma Vector Store Implementation
+// Chroma Vector Store Implementation (supports local and cloud)
 async function loadChromaVectorStore(): Promise<RetrieverLike> {
-  const client = new ChromaClient({
-    path: process.env.CHROMA_API_URL,
-  });
-
+  const chromaModule = await import("chromadb");
+  let client: any;
+  if (process.env.CHROMA_API_KEY && process.env.CHROMA_TENANT && process.env.CHROMA_DATABASE) {
+    // Use CloudClient if credentials are present
+    client = new chromaModule.CloudClient({
+      apiKey: process.env.CHROMA_API_KEY,
+      tenant: process.env.CHROMA_TENANT,
+      database: process.env.CHROMA_DATABASE,
+    });
+  } else {
+    // Use local ChromaClient
+    client = new chromaModule.ChromaClient({
+      path: process.env.CHROMA_API_URL,
+    });
+  }
   const collectionName = process.env.CHROMA_COLLECTION_NAME || "default";
   const collection = await client.getOrCreateCollection({ name: collectionName });
-
   return {
     similaritySearch: async (query: string, k = 3) => {
       const queryEmbedding = embedTextDeterministic(query);
-      
       const results = await collection.query({
         queryEmbeddings: [queryEmbedding],
         nResults: k,
       });
-
-      return results.ids[0].map((id, index) => ({
+      return results.ids[0].map((id: string, index: number) => ({
         id,
         pageContent: results.documents[0][index] || "",
         metadata: results.metadatas[0][index] || {},
