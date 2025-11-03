@@ -4,7 +4,7 @@ export type RAGResult = {
   answer: string;
   sources: Array<{ title?: string; id?: string; snippet?: string }>;
   raw?: any;
-};
+  parsed?: any;
 
 export function buildPrompt(query: string, contexts: Array<{ pageContent: string; metadata?: any }>) {
   const contextText = contexts
@@ -44,6 +44,18 @@ async function callOpenAIChat(prompt: string) {
   return { content, raw: payload };
 }
 
+// OutputParser: expects model to return JSON with answer and citations
+function parseStructuredOutput(text: string) {
+  try {
+    // Find first JSON block in output
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      return JSON.parse(match[0]);
+    }
+  } catch {}
+  return null;
+}
+
 export async function answerQuery(
   retriever: RetrieverLike,
   query: string,
@@ -56,25 +68,41 @@ export async function answerQuery(
 
   const llmResp = await callOpenAIChat(prompt);
 
-  const citationRegex = /\[source:(\d+)\]/g;
-  const sources: Array<{ title?: string; id?: string; snippet?: string }> = [];
-  const seen = new Set<number>();
-  let m;
-  while ((m = citationRegex.exec(llmResp.content)) !== null) {
-    const idx = parseInt(m[1], 10);
-    if (!seen.has(idx) && contexts[idx]) {
-      seen.add(idx);
-      sources.push({ id: contexts[idx].metadata?.id ?? `${idx}`, title: contexts[idx].metadata?.title, snippet: contexts[idx].pageContent.slice(0, 400) });
+  // Try to parse structured output
+  const parsed = parseStructuredOutput(llmResp.content);
+  let sources: Array<{ title?: string; id?: string; snippet?: string }> = [];
+  let answer = llmResp.content;
+  if (parsed && Array.isArray(parsed.citations)) {
+    answer = parsed.answer;
+    sources = parsed.citations.map((c: any) => {
+      const idx = typeof c.source === "number" ? c.source : parseInt(c.source, 10);
+      const ctx = contexts[idx];
+      return {
+        id: ctx?.metadata?.id ?? `${idx}`,
+        title: ctx?.metadata?.title,
+        snippet: c.snippet ?? ctx?.pageContent?.slice(0, 400),
+      };
+    });
+  } else {
+    // fallback: regex citations
+    const citationRegex = /\[source:(\d+)\]/g;
+    const seen = new Set<number>();
+    let m;
+    while ((m = citationRegex.exec(llmResp.content)) !== null) {
+      const idx = parseInt(m[1], 10);
+      if (!seen.has(idx) && contexts[idx]) {
+        seen.add(idx);
+        sources.push({ id: contexts[idx].metadata?.id ?? `${idx}`, title: contexts[idx].metadata?.title, snippet: contexts[idx].pageContent.slice(0, 400) });
+      }
+    }
+    if (sources.length === 0) {
+      for (let i = 0; i < Math.min(contexts.length, 3); i++) {
+        sources.push({ id: contexts[i].metadata?.id ?? `${i}`, title: contexts[i].metadata?.title, snippet: contexts[i].pageContent.slice(0, 400) });
+      }
     }
   }
 
-  if (sources.length === 0) {
-    for (let i = 0; i < Math.min(contexts.length, 3); i++) {
-      sources.push({ id: contexts[i].metadata?.id ?? `${i}`, title: contexts[i].metadata?.title, snippet: contexts[i].pageContent.slice(0, 400) });
-    }
-  }
-
-  return { answer: llmResp.content, sources, raw: llmResp.raw };
+  return { answer, sources, raw: llmResp.raw, parsed };
 }
 export function createRAGChain() {
   // placeholder RAG chain stub
