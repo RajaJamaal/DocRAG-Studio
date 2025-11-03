@@ -1,6 +1,8 @@
 import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
+import { Pinecone } from "@pinecone-database/pinecone";
+import { ChromaClient, CloudClient } from "chromadb";
 
 export type DocumentLike = {
   id?: string;
@@ -38,7 +40,8 @@ function embedTextDeterministic(text: string, dim = 32) {
   return vec;
 }
 
-export async function loadLocalVectorStore(): Promise<RetrieverLike> {
+// Local Vector Store Implementation
+async function loadLocalVectorStore(): Promise<RetrieverLike> {
   const fileJson = path.resolve(process.cwd(), "data/vectorstore.json");
   const dirStore = path.resolve(process.cwd(), "data/vectorstore");
 
@@ -100,5 +103,70 @@ export async function loadLocalVectorStore(): Promise<RetrieverLike> {
   };
 }
 
-// Modular vector store loader: local JSON (default), easy swap for Pinecone/Chroma
-// To swap to Pinecone/Chroma, replace loadLocalVectorStore with provider-specific logic and update .env
+// Pinecone Vector Store Implementation
+async function loadPineconeVectorStore(): Promise<RetrieverLike> {
+  const pinecone = new Pinecone({
+    apiKey: process.env.PINECONE_API_KEY!,
+  });
+
+  const index = pinecone.index(process.env.PINECONE_INDEX!);
+
+  return {
+    similaritySearch: async (query: string, k = 3) => {
+      const queryEmbedding = embedTextDeterministic(query);
+      
+      const results = await index.query({
+        vector: queryEmbedding,
+        topK: k,
+        includeMetadata: true,
+      });
+
+      return results.matches.map((match) => ({
+        id: match.id,
+        pageContent: match.metadata?.text as string,
+        metadata: match.metadata,
+      }));
+    },
+  };
+}
+
+// Chroma Vector Store Implementation
+async function loadChromaVectorStore(): Promise<RetrieverLike> {
+  const client = new ChromaClient({
+    path: process.env.CHROMA_API_URL,
+  });
+
+  const collectionName = process.env.CHROMA_COLLECTION_NAME || "default";
+  const collection = await client.getOrCreateCollection({ name: collectionName });
+
+  return {
+    similaritySearch: async (query: string, k = 3) => {
+      const queryEmbedding = embedTextDeterministic(query);
+      
+      const results = await collection.query({
+        queryEmbeddings: [queryEmbedding],
+        nResults: k,
+      });
+
+      return results.ids[0].map((id, index) => ({
+        id,
+        pageContent: results.documents[0][index] || "",
+        metadata: results.metadatas[0][index] || {},
+      }));
+    },
+  };
+}
+
+// Export vector store loader based on configuration
+export async function loadVectorStore(): Promise<RetrieverLike> {
+  // Uncomment the vector store implementation you want to use
+
+  // 1. Local Vector Store (default)
+  return loadLocalVectorStore();
+
+  // 2. Pinecone Vector Store
+  // return loadPineconeVectorStore();
+
+  // 3. Chroma Vector Store (local or cloud)
+  // return loadChromaVectorStore();
+}

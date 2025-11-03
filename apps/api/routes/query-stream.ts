@@ -1,5 +1,17 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { loadLocalVectorStore } from "../../../packages/retrieval/vectorStoreLoader";
+// Local type fallbacks to avoid requiring 'next' types in environments where Next.js isn't installed
+type NextApiRequest = import("http").IncomingMessage & {
+  query?: Record<string, any> | string;
+  body?: any;
+};
+
+type NextApiResponse<T = any> = import("http").ServerResponse & {
+  json?: (body: T) => void;
+  setHeader: (name: string, value: number | string | string[]) => void;
+  write: (chunk: any) => boolean;
+  end: (data?: any) => void;
+};
+
+import { loadVectorStore } from "../../../packages/retrieval/vectorStoreLoader";
 import { buildPrompt } from "../../../packages/retrieval/ragChain";
 
 export const config = {
@@ -13,7 +25,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
-  const q = typeof req.query.q === "string" ? req.query.q : req.body?.q;
+  const q =
+    req.query && typeof req.query === "object" && typeof (req.query as Record<string, any>).q === "string"
+      ? (req.query as Record<string, any>).q
+      : req.body?.q;
   if (!q) {
     res.write(`event: error\ndata: ${JSON.stringify({ error: "Query 'q' required" })}\n\n`);
     res.end();
@@ -21,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const retriever = await loadLocalVectorStore();
+    const retriever = await loadVectorStore();
     const contexts = await retriever.similaritySearch(q, 3);
     const prompt = buildPrompt(q, contexts);
 
