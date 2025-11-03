@@ -15,7 +15,9 @@
     "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
+    "@types/next": "^8.0.7",
+    "@types/node": "^18.19.130",
+    "@types/react": "^19.2.2",
     "ts-node": "^10.0.0",
     "typescript": "^5.0.0"
   }
