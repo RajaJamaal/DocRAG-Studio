@@ -10,36 +10,68 @@ type NextApiResponse<T = any> = import("http").ServerResponse & {
   write: (chunk: any) => boolean;
   end: (data?: any) => void;
 };
-import { loadVectorStore } from "../../../packages/retrieval/vectorStoreLoader";
-import { answerQuery } from "../../../packages/retrieval/ragChain";
+import { loadVectorStore } from "../../../packages/retrieval/vectorStoreLoader/index.js";
+import { answerQuery } from "../../../packages/retrieval/ragChain/index.js";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  console.log('[route:query] handler invoked');
+  console.log('[route:query] req.method, req.url', (req as any).method, (req as any).url);
   try {
     let q: string | undefined;
-    if (req.query && typeof req.query === "object" && "q" in req.query) {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    
+    await new Promise((resolve) => {
+      req.on('end', () => {
+        if (body) {
+          try {
+            const json = JSON.parse(body);
+            if (json && typeof json === "object" && "q" in json) {
+              q = json.q;
+            }
+          } catch (e) {
+            console.log('[route:query] error parsing body:', e);
+          }
+        }
+        resolve(undefined);
+      });
+    });
+
+    if (!q && req.query && typeof req.query === "object" && "q" in req.query) {
       q = (req.query as Record<string, any>).q;
-    } else if (typeof req.query === "string") {
-      q = req.query;
-    } else if (req.body && typeof req.body === "object" && "q" in req.body) {
-      q = req.body.q;
     }
+    
     if (!q) {
+      console.log('[route:query] missing query');
       res.statusCode = 400;
       res.json?.({ error: "Query 'q' required" });
       return;
     }
 
+    console.log('[route:query] query=', q);
+    console.log('[route:query] loading vector store');
+  console.log('[route:query] calling loadVectorStore()');
   const retriever = await loadVectorStore();
+  console.log('[route:query] loadVectorStore() resolved');
+    console.log('[route:query] vector store loaded');
 
+  console.log('[route:query] calling answerQuery');
     const result = await answerQuery(retriever, q, { topK: 3 });
+    console.log('[route:query] answerQuery returned');
 
-  res.statusCode = 200;
-  res.json?.(result);
-  return;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    const json = JSON.stringify(result);
+    res.setHeader('Content-Length', Buffer.byteLength(json));
+    res.end(json);
+    console.log('[route:query] response sent');
+    return;
   } catch (err) {
-    console.error("Query error:", (err as Error).message);
-  res.statusCode = 500;
-  res.json?.({ error: (err as Error).message });
-  return;
+    console.error("[route:query] Query error:", (err as Error).message);
+    res.statusCode = 500;
+    res.json?.({ error: (err as Error).message });
+    return;
   }
 }

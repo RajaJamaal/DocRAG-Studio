@@ -11,8 +11,8 @@ type NextApiResponse<T = any> = import("http").ServerResponse & {
   end: (data?: any) => void;
 };
 
-import { loadVectorStore } from "../../../packages/retrieval/vectorStoreLoader";
-import { buildPrompt } from "../../../packages/retrieval/ragChain";
+import { loadVectorStore } from "../../../packages/retrieval/vectorStoreLoader/index.js";
+import { buildPrompt } from "../../../packages/retrieval/ragChain/index.js";
 
 export const config = {
   api: {
@@ -21,6 +21,7 @@ export const config = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  console.log('[route:query-stream] handler invoked', { method: (req as any).method, url: (req as any).url });
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -36,9 +37,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    console.log('[route:query-stream] calling loadVectorStore()');
     const retriever = await loadVectorStore();
+    console.log('[route:query-stream] loadVectorStore() resolved');
     const contexts = await retriever.similaritySearch(q, 3);
+    console.log('[route:query-stream] similaritySearch returned count=', contexts.length);
     const prompt = buildPrompt(q, contexts);
+    console.log('[route:query-stream] built prompt len=', prompt.length);
 
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error("OPENAI_API_KEY not set in env");
@@ -58,14 +63,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }),
     });
 
-    if (!resp.body) throw new Error("No response body from OpenAI");
-
-    const reader = resp.body.getReader();
+  if (!resp.body) throw new Error("No response body from OpenAI");
+  console.log('[route:query-stream] OpenAI responded, obtaining reader');
+  const reader = resp.body.getReader();
     let buffer = "";
     let done = false;
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
+      console.log('[route:query-stream] reader.read() done=', done);
       if (value) {
         buffer += new TextDecoder().decode(value);
         const lines = buffer.split("\n");
@@ -73,6 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const data = line.slice(6);
+            console.log('[route:query-stream] got data chunk:', data.slice(0, 80));
             if (data === "[DONE]") {
               res.write(`event: done\ndata: [DONE]\n\n`);
               res.end();

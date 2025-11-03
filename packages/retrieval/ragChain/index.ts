@@ -1,4 +1,4 @@
-import type { RetrieverLike } from "./vectorStoreLoader";
+import type { RetrieverLike } from "../vectorStoreLoader/index.js";
 
 export type RAGResult = {
   answer: string;
@@ -8,6 +8,7 @@ export type RAGResult = {
 };
 
 export function buildPrompt(query: string, contexts: Array<{ pageContent: string; metadata?: any }>) {
+  console.log('[ragChain] buildPrompt entry', { query, contextCount: contexts.length });
   const contextText = contexts
     .map((c, i) => `[[source:${i}]]\n${c.pageContent}\n`)
     .join("\n---\n");
@@ -18,6 +19,7 @@ export function buildPrompt(query: string, contexts: Array<{ pageContent: string
 }
 
 async function callOpenAIChat(prompt: string) {
+  console.log('[ragChain] callOpenAIChat entry; prompt len=', prompt.length);
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY not set in env");
 
@@ -42,6 +44,7 @@ async function callOpenAIChat(prompt: string) {
 
   const payload = await res.json();
   const content = payload?.choices?.[0]?.message?.content ?? JSON.stringify(payload, null, 2);
+  console.log('[ragChain] callOpenAIChat received content len=', content.length);
   return { content, raw: payload };
 }
 
@@ -96,20 +99,7 @@ export async function answerQuery(
         sources.push({ id: contexts[idx].metadata?.id ?? `${idx}`, title: contexts[idx].metadata?.title, snippet: contexts[idx].pageContent.slice(0, 400) });
       }
     }
-    if (sources.length === 0) {
-      for (let i = 0; i < Math.min(contexts.length, 3); i++) {
-        sources.push({ id: contexts[i].metadata?.id ?? `${i}`, title: contexts[i].metadata?.title, snippet: contexts[i].pageContent.slice(0, 400) });
-      }
-    }
   }
 
   return { answer, sources, raw: llmResp.raw, parsed };
-}
-export function createRAGChain() {
-  // placeholder RAG chain stub
-  return {
-    async run(query: string) {
-      return { answer: `Stub answer for: ${query}`, sources: [] };
-    },
-  };
 }

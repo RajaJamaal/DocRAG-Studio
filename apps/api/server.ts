@@ -1,29 +1,49 @@
 import http from "http";
 import url from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import fs from "fs";
+import dotenv from "dotenv";
+
+// Load environment variables from .env file
+dotenv.config();
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 async function loadHandler(pathname: string) {
-  // try TypeScript first (we run with ts-node/esm), then JS
-  const tsFile = `./routes${pathname}.ts`;
-  const jsFile = `./routes${pathname}.js`;
-  let file = "";
-  if (fs.existsSync(tsFile)) file = tsFile;
-  else if (fs.existsSync(jsFile)) file = jsFile;
-  else throw new Error(`Handler not found: ${tsFile} or ${jsFile}`);
-  const mod = await import(file);
+  // Map '/api/routes/<name>' -> './routes/<name>.ts' or .js
+  const prefix = "/api/routes/";
+  if (!pathname.startsWith(prefix)) throw new Error("Invalid route");
+  // sanitize route name to avoid duplicated segments
+  let name = pathname.replace(new RegExp(`^${prefix}+`), "").replace(/\/+/g, "/");
+  // take the last path segment (e.g. 'query' from 'query' or 'api/routes/query')
+  name = name.split("/").filter(Boolean).pop() || "";
+
+  const tsUrl = new URL(`./routes/${name}.ts`, import.meta.url);
+  const jsUrl = new URL(`./routes/${name}.js`, import.meta.url);
+  const tsPath = fileURLToPath(tsUrl);
+  const jsPath = fileURLToPath(jsUrl);
+
+  let chosenUrl: URL | null = null;
+  if (fs.existsSync(jsPath)) chosenUrl = jsUrl;
+  else if (fs.existsSync(tsPath)) chosenUrl = tsUrl;
+  else throw new Error(`Handler not found: ${tsUrl.href} or ${jsUrl.href}`);
+
+  const mod = await import(chosenUrl.href);
   return mod.default;
 }
 
 const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url || "", true);
   const pathname = parsed.pathname || "";
+  console.log("[server] incoming", req.method, pathname);
 
   try {
     if (pathname === "/api/routes/query" || pathname === "/api/routes/query-stream") {
+      console.log("[server] resolving handler for", pathname);
       const handler = await loadHandler(pathname);
+      console.log("[server] loaded handler; invoking...");
       await handler(req as any, res as any);
+      console.log("[server] handler completed");
       return;
     }
 
