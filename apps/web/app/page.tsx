@@ -10,7 +10,7 @@ export default function Home() {
     setAnswer("");
     setLoading(true);
     const q = e.target.query.value;
-    const es = new EventSource(`/api/query-stream?q=${encodeURIComponent(q)}`);
+    const es = new EventSource(`http://localhost:3000/api/routes/query-stream?q=${encodeURIComponent(q)}`);
     es.onmessage = (event) => {
       // fallback for default event
       setAnswer((prev) => prev + event.data);
