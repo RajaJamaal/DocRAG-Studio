@@ -34,6 +34,21 @@ async function loadHandler(pathname: string) {
 }
 
 const server = http.createServer(async (req, res) => {
+  // Set CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*"); // Or a specific origin
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, traceparent, tracestate"
+  );
+
+  // Handle OPTIONS pre-flight requests
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   const parsed = url.parse(req.url || "", true);
   const pathname = parsed.pathname || "";
   console.log("[server] incoming", req.method, pathname);
