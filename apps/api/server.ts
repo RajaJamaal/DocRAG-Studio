@@ -1,3 +1,4 @@
+import "./tracing.js";
 import http from "http";
 import url from "url";
 import { fileURLToPath, pathToFileURL } from "url";

@@ -1,4 +1,5 @@
 "use client";
+import "../tracing";
 import { useState } from "react";
 
 export default function Home() {

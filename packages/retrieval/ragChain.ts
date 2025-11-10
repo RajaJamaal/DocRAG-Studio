@@ -1,4 +1,8 @@
+import { trace } from "@opentelemetry/api";
 import type { RetrieverLike } from "./vectorStoreLoader/index.js";
+
+const tracer = trace.getTracer("rag-chain");
+
 
 export type RAGResult = {
   answer: string;
@@ -74,48 +78,65 @@ export async function answerQuery(
   query: string,
   opts?: { topK?: number }
 ): Promise<RAGResult> {
-  const topK = opts?.topK ?? 3;
-  const contexts = await retriever.similaritySearch(query, topK);
+  return tracer.startActiveSpan("answerQuery", async (span) => {
+    const topK = opts?.topK ?? 3;
 
-  const prompt = buildPrompt(query, contexts as any);
-
-  const llmResp = await callOpenAIChat(prompt);
-
-  // Try to parse structured output
-  const parsed = parseStructuredOutput(llmResp.content);
-  let sources: Array<{ title?: string; id?: string; snippet?: string }> = [];
-  let answer = llmResp.content;
-  if (parsed && Array.isArray(parsed.citations)) {
-    answer = parsed.answer;
-    sources = parsed.citations.map((c: any) => {
-      const idx = typeof c.source === "number" ? c.source : parseInt(c.source, 10);
-      const ctx = contexts[idx];
-      return {
-        id: ctx?.metadata?.id ?? `${idx}`,
-        title: ctx?.metadata?.title,
-        snippet: c.snippet ?? ctx?.pageContent?.slice(0, 400),
-      };
+    const contexts = await tracer.startActiveSpan("similaritySearch", async (span) => {
+      span.setAttribute("topK", topK);
+      const contexts = await retriever.similaritySearch(query, topK);
+      span.end();
+      return contexts;
     });
-  } else {
-    // fallback: regex citations
-    const citationRegex = /\[source:(\d+)\]/g;
-    const seen = new Set<number>();
-    let m;
-    while ((m = citationRegex.exec(llmResp.content)) !== null) {
-      const idx = parseInt(m[1], 10);
-      if (!seen.has(idx) && contexts[idx]) {
-        seen.add(idx);
-        sources.push({ id: contexts[idx].metadata?.id ?? `${idx}`, title: contexts[idx].metadata?.title, snippet: contexts[idx].pageContent.slice(0, 400) });
-      }
-    }
-    if (sources.length === 0) {
-      for (let i = 0; i < Math.min(contexts.length, 3); i++) {
-        sources.push({ id: contexts[i].metadata?.id ?? `${i}`, title: contexts[i].metadata?.title, snippet: contexts[i].pageContent.slice(0, 400) });
-      }
-    }
-  }
 
-  return { answer, sources, raw: llmResp.raw, parsed };
+    const prompt = tracer.startActiveSpan("buildPrompt", (span) => {
+      const prompt = buildPrompt(query, contexts as any);
+      span.end();
+      return prompt;
+    });
+
+    const llmResp = await tracer.startActiveSpan("callOpenAIChat", async (span) => {
+      const llmResp = await callOpenAIChat(prompt);
+      span.end();
+      return llmResp;
+    });
+
+    // Try to parse structured output
+    const parsed = parseStructuredOutput(llmResp.content);
+    let sources: Array<{ title?: string; id?: string; snippet?: string }> = [];
+    let answer = llmResp.content;
+    if (parsed && Array.isArray(parsed.citations)) {
+      answer = parsed.answer;
+      sources = parsed.citations.map((c: any) => {
+        const idx = typeof c.source === "number" ? c.source : parseInt(c.source, 10);
+        const ctx = contexts[idx];
+        return {
+          id: ctx?.metadata?.id ?? `${idx}`,
+          title: ctx?.metadata?.title,
+          snippet: c.snippet ?? ctx?.pageContent?.slice(0, 400),
+        };
+      });
+    } else {
+      // fallback: regex citations
+      const citationRegex = /\[source:(\d+)\]/g;
+      const seen = new Set<number>();
+      let m;
+      while ((m = citationRegex.exec(llmResp.content)) !== null) {
+        const idx = parseInt(m[1], 10);
+        if (!seen.has(idx) && contexts[idx]) {
+          seen.add(idx);
+          sources.push({ id: contexts[idx].metadata?.id ?? `${idx}`, title: contexts[idx].metadata?.title, snippet: contexts[idx].pageContent.slice(0, 400) });
+        }
+      }
+      if (sources.length === 0) {
+        for (let i = 0; i < Math.min(contexts.length, 3); i++) {
+          sources.push({ id: contexts[i].metadata?.id ?? `${i}`, title: contexts[i].metadata?.title, snippet: contexts[i].pageContent.slice(0, 400) });
+        }
+      }
+    }
+
+    span.end();
+    return { answer, sources, raw: llmResp.raw, parsed };
+  });
 }
 export function createRAGChain() {
   // placeholder RAG chain stub
