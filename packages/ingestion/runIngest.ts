@@ -38,14 +38,14 @@ async function main() {
 
     // Build and run ingestion graph
     const graph = buildIngestionGraph();
-    const result = await tracer.startActiveSpan("ingestionGraph.invoke", async (span) => {
-      const result = await graph.invoke({ filePaths: ["./data/sample.txt"] });
-      console.log("✓ Ingestion complete:", result);
+    const finalState = await tracer.startActiveSpan("ingestionGraph.invoke", async (span) => {
+      const finalState = await graph.invoke({ filePaths: ["./data/sample.txt"] });
+      console.log("✓ Ingestion complete:", finalState);
       span.end();
-      return result;
+      return finalState;
     });
     span.end();
-    return result;
+    return finalState;
   });
 }
 

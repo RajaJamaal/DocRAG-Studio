@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import type { Document } from "@langchain/core/documents";
 
 type StoredVector = {
   id: string;
@@ -61,4 +62,18 @@ function cosineSimilarity(a: number[], b: number[]) {
     normB += b[i] * b[i];
   }
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+export async function storeEmbeddings(chunks: Document[]) {
+    const store = new LocalVectorStore("./data/vectorstore.json");
+    await store.load();
+
+    const vectors: StoredVector[] = chunks.map((chunk) => ({
+        id: chunk.metadata.id as string,
+        embedding: chunk.metadata.embedding as number[],
+        text: chunk.pageContent,
+        metadata: chunk.metadata,
+    }));
+
+    await store.addVectors(vectors);
 }

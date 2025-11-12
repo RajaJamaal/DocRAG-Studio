@@ -1,48 +1,60 @@
-type GraphState = {
-  filePaths: string[];
-  chunksProcessed?: number;
-  vectorsAdded?: number;
-};
+import { z } from "zod";
+import { StateGraph, END } from "langgraph";
+import { loadDocuments } from "../ingestion/loaders.js";
+import { splitDocuments } from "../ingestion/splitters.js";
+import { generateEmbeddings } from "../ingestion/embeddings.js";
+import { storeEmbeddings } from "../ingestion/store.js";
+import type { Document } from "@langchain/core/documents";
+
+// Zod schema for the graph state
+const graphStateSchema = z.object({
+  filePaths: z.array(z.string()),
+  documents: z.array(z.any()).optional(),
+  chunks: z.array(z.any()).optional(),
+  processedChunks: z.number().optional(),
+});
+
+type GraphState = z.infer<typeof graphStateSchema>;
+
+async function load(state: GraphState): Promise<Partial<GraphState>> {
+  console.log("---LOADING DOCUMENTS---");
+  const documents = await loadDocuments(state.filePaths);
+  return { documents };
+}
+
+async function split(state: GraphState): Promise<Partial<GraphState>> {
+  console.log("---SPLITTING DOCUMENTS---");
+  const chunks = await splitDocuments(state.documents as Document[]);
+  return { chunks };
+}
+
+async function embed(state: GraphState): Promise<Partial<GraphState>> {
+  console.log("---GENERATING EMBEDDINGS---");
+  const chunksWithEmbeddings = await generateEmbeddings(state.chunks as Document[]);
+  return { chunks: chunksWithEmbeddings };
+}
+
+async function store(state: GraphState): Promise<Partial<GraphState>> {
+  console.log("---STORING EMBEDDINGS---");
+  await storeEmbeddings(state.chunks as Document[]);
+  return { processedChunks: state.chunks?.length };
+}
 
 export function buildIngestionGraph() {
-  const checkpoint = {
-    async save(state: GraphState) {
-      const fs = await import("fs/promises");
-      await fs.mkdir("./data/checkpoints", { recursive: true });
-      await fs.writeFile(
-        "./data/checkpoints/ingestion.json",
-        JSON.stringify(state, null, 2)
-      );
-    },
-    async load(): Promise<GraphState | null> {
-      try {
-        const fs = await import("fs/promises");
-        const data = await fs.readFile("./data/checkpoints/ingestion.json", "utf-8");
-        return JSON.parse(data);
-      } catch (err) {
-        if ((err as any).code === "ENOENT") return null;
-        throw err;
-      }
-    }
-  };
+  const workflow = new StateGraph<GraphState>({
+    schema: graphStateSchema,
+  });
 
-  return {
-    async invoke(input: GraphState) {
-      // Try to load checkpoint
-      const saved = await checkpoint.load();
-      if (saved?.chunksProcessed) {
-        console.log("Resuming from checkpoint:", saved);
-        return saved;
-      }
+  workflow.addNode("load", load);
+  workflow.addNode("split", split);
+  workflow.addNode("embed", embed);
+  workflow.addNode("store", store);
 
-      // Run ingestion
-      const { ingestDocuments } = await import("../ingestion/index.js");
-      const result = await ingestDocuments(input.filePaths);
-      
-      // Save checkpoint and return
-      const state = { ...input, ...result };
-      await checkpoint.save(state);
-      return state;
-    }
-  };
+  workflow.setEntryPoint("load");
+  workflow.addEdge("load", "split");
+  workflow.addEdge("split", "embed");
+  workflow.addEdge("embed", "store");
+  workflow.addEdge("store", END);
+
+  return workflow.compile();
 }

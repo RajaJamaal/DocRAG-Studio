@@ -1,148 +1,120 @@
-import { trace } from "@opentelemetry/api";
+import { z } from "zod";
+import { ChatOpenAI } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import {
+  RunnableSequence,
+} from "@langchain/core/runnables";
+import { StringOutputParser } from "@langchain/core/output_parsers";
+import type { Document } from "@langchain/core/documents";
 import type { RetrieverLike } from "./vectorStoreLoader/index.js";
 
-const tracer = trace.getTracer("rag-chain");
+// Zod schema for a single source
+const sourceSchema = z.object({
+  pageContent: z.string(),
+  metadata: z.record(z.unknown()),
+});
 
+// Zod schema for the final answer
+const answerSchema = z.object({
+  answer: z.string().describe("The final answer to the user's query."),
+  sources: z.array(sourceSchema).describe("The source documents used to generate the answer."),
+});
 
-export type RAGResult = {
-  answer: string;
-  sources: Array<{ title?: string; id?: string; snippet?: string }>;
-  raw?: any;
-  parsed?: any;
-};
+export type RAGResult = z.infer<typeof answerSchema>;
 
-export function buildPrompt(query: string, contexts: Array<{ pageContent: string; metadata?: any }>) {
-  console.log('[ragChain] buildPrompt entry', { query, contextCount: contexts.length });
-  const contextText = contexts
-    .map((c, i) => `[[source:${i}]]\n${c.pageContent}\n`)
-    .join("\n---\n");
-
-  const prompt = `You are a helpful assistant. Use the provided context to answer the question below.\nCite each fact by referencing the source id, like [source:0], [source:1].\nIf the answer is not contained in the provided context, say \"I don't know\".\n\nContext:\n${contextText}\nQuestion:\n${query}\n\nAnswer (include citations inline):`;
-
-  return prompt;
+// Function to format documents
+function formatDocuments(docs: Document[]) {
+  return docs.map((doc) => doc.pageContent).join("\n\n");
 }
 
-async function callOpenAIChat(prompt: string) {
-  console.log('[ragChain] callOpenAIChat entry; prompt len=', prompt.length);
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error("OPENAI_API_KEY not set in env");
+const PROMPT_TEMPLATE = `You are a helpful assistant. Use the provided context to answer the question below.
 
-  console.log('[ragChain] sending request to OpenAI');
-  const body = JSON.stringify({
-    model: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.0,
-    max_tokens: 800,
-  });
-  console.log('[ragChain] request body:', body);
+Context:
+{context}
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body,
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.log('[ragChain] OpenAI error response:', text);
-    throw new Error(`OpenAI error: ${res.status} ${text}`);
-  }
-
-  console.log('[ragChain] OpenAI response status:', res.status);
-  const text = await res.text();
-  console.log('[ragChain] OpenAI response text:', text);
-  const payload = JSON.parse(text);
-  console.log('[ragChain] OpenAI response payload:', JSON.stringify(payload));
-  const content = payload?.choices?.[0]?.message?.content ?? JSON.stringify(payload, null, 2);
-  console.log('[ragChain] callOpenAIChat received content len=', content.length);
-  return { content, raw: payload };
-}
-
-// OutputParser: expects model to return JSON with answer and citations
-function parseStructuredOutput(text: string) {
-  try {
-    // Find first JSON block in output
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      return JSON.parse(match[0]);
-    }
-  } catch {}
-  return null;
-}
+Question:
+{question}
+`;
+const prompt = PromptTemplate.fromTemplate(PROMPT_TEMPLATE);
 
 export async function answerQuery(
   retriever: RetrieverLike,
   query: string,
   opts?: { topK?: number }
 ): Promise<RAGResult> {
-  return tracer.startActiveSpan("answerQuery", async (span) => {
-    const topK = opts?.topK ?? 3;
+  const topK = opts?.topK ?? 3;
 
-    const contexts = await tracer.startActiveSpan("similaritySearch", async (span) => {
-      span.setAttribute("topK", topK);
-      const contexts = await retriever.similaritySearch(query, topK);
-      span.end();
-      return contexts;
-    });
-
-    const prompt = tracer.startActiveSpan("buildPrompt", (span) => {
-      const prompt = buildPrompt(query, contexts as any);
-      span.end();
-      return prompt;
-    });
-
-    const llmResp = await tracer.startActiveSpan("callOpenAIChat", async (span) => {
-      const llmResp = await callOpenAIChat(prompt);
-      span.end();
-      return llmResp;
-    });
-
-    // Try to parse structured output
-    const parsed = parseStructuredOutput(llmResp.content);
-    let sources: Array<{ title?: string; id?: string; snippet?: string }> = [];
-    let answer = llmResp.content;
-    if (parsed && Array.isArray(parsed.citations)) {
-      answer = parsed.answer;
-      sources = parsed.citations.map((c: any) => {
-        const idx = typeof c.source === "number" ? c.source : parseInt(c.source, 10);
-        const ctx = contexts[idx];
-        return {
-          id: ctx?.metadata?.id ?? `${idx}`,
-          title: ctx?.metadata?.title,
-          snippet: c.snippet ?? ctx?.pageContent?.slice(0, 400),
-        };
-      });
-    } else {
-      // fallback: regex citations
-      const citationRegex = /\[source:(\d+)\]/g;
-      const seen = new Set<number>();
-      let m;
-      while ((m = citationRegex.exec(llmResp.content)) !== null) {
-        const idx = parseInt(m[1], 10);
-        if (!seen.has(idx) && contexts[idx]) {
-          seen.add(idx);
-          sources.push({ id: contexts[idx].metadata?.id ?? `${idx}`, title: contexts[idx].metadata?.title, snippet: contexts[idx].pageContent.slice(0, 400) });
-        }
-      }
-      if (sources.length === 0) {
-        for (let i = 0; i < Math.min(contexts.length, 3); i++) {
-          sources.push({ id: contexts[i].metadata?.id ?? `${i}`, title: contexts[i].metadata?.title, snippet: contexts[i].pageContent.slice(0, 400) });
-        }
-      }
-    }
-
-    span.end();
-    return { answer, sources, raw: llmResp.raw, parsed };
+  const model = new ChatOpenAI({
+    modelName: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
+    temperature: 0,
   });
-}
-export function createRAGChain() {
-  // placeholder RAG chain stub
-  return {
-    async run(query: string) {
-      return { answer: `Stub answer for: ${query}`, sources: [] };
+
+  const retrieverChain = RunnableSequence.from([
+    (input: { question: string }) => input.question,
+    (query) => retriever.similaritySearch(query, topK),
+  ]);
+
+  const chain = RunnableSequence.from([
+    {
+      sources: retrieverChain,
+      question: (input: { question: string }) => input.question,
     },
-  };
+    {
+      answer: (input) =>
+        RunnableSequence.from([
+          (input) => ({
+            context: formatDocuments(input.sources),
+            question: input.question,
+          }),
+          prompt,
+          model,
+          new StringOutputParser(),
+        ]).invoke(input),
+      sources: (input) => input.sources,
+    },
+  ]);
+
+  const result = await chain.invoke({ question: query });
+
+  // Validate the final result with Zod
+  return answerSchema.parse(result);
+}
+
+export async function* streamAnswerQuery(
+  retriever: RetrieverLike,
+  query: string,
+  opts?: { topK?: number }
+): AsyncGenerator<string> {
+  const topK = opts?.topK ?? 3;
+
+  const model = new ChatOpenAI({
+    modelName: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
+    temperature: 0,
+    streaming: true, // Enable streaming
+  });
+
+  const retrieverChain = RunnableSequence.from([
+    (input: { question: string }) => input.question,
+    (query) => retriever.similaritySearch(query, topK),
+  ]);
+
+  const chain = RunnableSequence.from([
+    {
+      sources: retrieverChain,
+      question: (input: { question: string }) => input.question,
+    },
+    (input) => ({
+      context: formatDocuments(input.sources),
+      question: input.question,
+    }),
+    prompt,
+    model,
+    new StringOutputParser(),
+  ]);
+
+  const stream = await chain.stream({ question: query });
+
+  for await (const chunk of stream) {
+    yield chunk;
+  }
 }
