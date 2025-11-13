@@ -54,22 +54,21 @@ export async function answerQuery(
     (query) => retriever.similaritySearch(query, topK),
   ]);
 
+  const answerGenerationChain = RunnableSequence.from([
+    (input: { sources: Document[]; question: string }) => ({
+      context: formatDocuments(input.sources),
+      question: input.question,
+    }),
+    prompt.pipe(model).pipe(new StringOutputParser()),
+  ]);
+
   const chain = RunnableSequence.from([
     {
       sources: retrieverChain,
       question: (input: { question: string }) => input.question,
     },
     {
-      answer: (input) =>
-        RunnableSequence.from([
-          (input) => ({
-            context: formatDocuments(input.sources),
-            question: input.question,
-          }),
-          prompt,
-          model,
-          new StringOutputParser(),
-        ]).invoke(input),
+      answer: answerGenerationChain,
       sources: (input) => input.sources,
     },
   ]);
@@ -83,7 +82,7 @@ export async function answerQuery(
 export async function* streamAnswerQuery(
   retriever: RetrieverLike,
   query: string,
-  opts?: { topK?: number }
+  opts?: { topK?: number } 
 ): AsyncGenerator<string> {
   const topK = opts?.topK ?? 3;
 
@@ -98,18 +97,20 @@ export async function* streamAnswerQuery(
     (query) => retriever.similaritySearch(query, topK),
   ]);
 
+  const streamAnswerGenerationChain = RunnableSequence.from([
+    (input: { sources: Document[]; question: string }) => ({
+      context: formatDocuments(input.sources),
+      question: input.question,
+    }),
+    prompt.pipe(model).pipe(new StringOutputParser()),
+  ]);
+
   const chain = RunnableSequence.from([
     {
       sources: retrieverChain,
       question: (input: { question: string }) => input.question,
     },
-    (input) => ({
-      context: formatDocuments(input.sources),
-      question: input.question,
-    }),
-    prompt,
-    model,
-    new StringOutputParser(),
+    streamAnswerGenerationChain,
   ]);
 
   const stream = await chain.stream({ question: query });

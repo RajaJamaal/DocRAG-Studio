@@ -1,20 +1,20 @@
 import { z } from "zod";
+import url from "url"; // Import url module
 // Local type fallbacks to avoid requiring 'next' types in environments where Next.js isn't installed
-type NextApiRequest = import("http").IncomingMessage &
-  {
-    query?: Record<string, any> | string;
-    body?: any;
-  };
-type NextApiResponse<T = any> = import("http").ServerResponse &
-  {
-    json?: (body: T) => void;
-    setHeader: (name: string, value: number | string | string[]) => void;
-    write: (chunk: any) => boolean;
-    end: (data?: any) => void;
-  };
+type NextApiRequest = import("http").IncomingMessage & {
+  query?: Record<string, any> | string;
+  body?: any;
+};
+
+type NextApiResponse<T = any> = import("http").ServerResponse & {
+  json?: (body: T) => void;
+  setHeader: (name: string, value: number | string | string[]) => void;
+  write: (chunk: any) => boolean;
+  end: (data?: any) => void;
+};
 
 import { loadVectorStore } from "../../../packages/retrieval/vectorStoreLoader/index.js";
-import { streamAnswerQuery } from "../../../packages/retrieval/ragChain/index.js"; // Import the new streaming function
+import { streamAnswerQuery } from "../../../packages/retrieval/ragChain.js"; // Corrected import path
 
 export const config = {
   api: {
@@ -34,7 +34,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   let q: string;
   try {
-    const parsedQuery = querySchema.parse({ q: req.query?.q || req.body?.q });
+    let rawQuery: string | undefined;
+
+    if (req.method === "POST") {
+      const bodyPromise = new Promise<string>((resolve) => {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        req.on('end', () => resolve(body));
+      });
+      const body = await bodyPromise;
+
+      if (body) {
+        const json = JSON.parse(body);
+        rawQuery = json.q;
+      }
+    } else if (req.method === "GET") {
+      const parsedUrl = url.parse(req.url || "", true);
+      const queryParam = parsedUrl.query.q;
+      if (typeof queryParam === 'string') {
+        rawQuery = queryParam;
+      } else if (Array.isArray(queryParam)) {
+        rawQuery = queryParam[0];
+      }
+    }
+
+    const parsedQuery = querySchema.parse({ q: rawQuery });
     q = parsedQuery.q;
   } catch (e) {
     res.write(`event: error\ndata: ${JSON.stringify({ error: (e as Error).message })}\n\n`);

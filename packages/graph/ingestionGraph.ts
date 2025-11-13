@@ -1,16 +1,24 @@
 import { z } from "zod";
-import { StateGraph, END } from "langgraph";
+import { StateGraph, END } from "@langchain/langgraph";
 import { loadDocuments } from "../ingestion/loaders.js";
 import { splitDocuments } from "../ingestion/splitters.js";
 import { generateEmbeddings } from "../ingestion/embeddings.js";
 import { storeEmbeddings } from "../ingestion/store.js";
 import type { Document } from "@langchain/core/documents";
+import type { LoadedDocument } from "../ingestion/loaders.js"; // Import LoadedDocument
 
 // Zod schema for the graph state
 const graphStateSchema = z.object({
   filePaths: z.array(z.string()),
-  documents: z.array(z.any()).optional(),
-  chunks: z.array(z.any()).optional(),
+  documents: z.array(z.object({
+    id: z.string(),
+    pageContent: z.string(),
+    metadata: z.record(z.unknown()).optional(),
+  })).optional(),
+  chunks: z.array(z.object({
+    pageContent: z.string(),
+    metadata: z.record(z.unknown()).optional(),
+  })).optional(),
   processedChunks: z.number().optional(),
 });
 
@@ -24,7 +32,7 @@ async function load(state: GraphState): Promise<Partial<GraphState>> {
 
 async function split(state: GraphState): Promise<Partial<GraphState>> {
   console.log("---SPLITTING DOCUMENTS---");
-  const chunks = await splitDocuments(state.documents as Document[]);
+  const chunks = await splitDocuments(state.documents as LoadedDocument[]); // Cast to LoadedDocument[]
   return { chunks };
 }
 
@@ -41,9 +49,7 @@ async function store(state: GraphState): Promise<Partial<GraphState>> {
 }
 
 export function buildIngestionGraph() {
-  const workflow = new StateGraph<GraphState>({
-    schema: graphStateSchema,
-  });
+  const workflow = new StateGraph<GraphState>(); // Removed schema property
 
   workflow.addNode("load", load);
   workflow.addNode("split", split);
