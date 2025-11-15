@@ -15,10 +15,7 @@ const graphStateSchema = z.object({
     pageContent: z.string(),
     metadata: z.record(z.unknown()).optional(),
   })).optional(),
-  chunks: z.array(z.object({
-    pageContent: z.string(),
-    metadata: z.record(z.unknown()).optional(),
-  })).optional(),
+  chunks: z.array(z.any()).optional(),
   processedChunks: z.number().optional(),
 });
 
@@ -32,7 +29,7 @@ async function load(state: GraphState): Promise<Partial<GraphState>> {
 
 async function split(state: GraphState): Promise<Partial<GraphState>> {
   console.log("---SPLITTING DOCUMENTS---");
-  const chunks = await splitDocuments(state.documents as LoadedDocument[]); // Cast to LoadedDocument[]
+  const chunks = await splitDocuments(state.documents as LoadedDocument[]);
   return { chunks };
 }
 
@@ -49,7 +46,26 @@ async function store(state: GraphState): Promise<Partial<GraphState>> {
 }
 
 export function buildIngestionGraph() {
-  const workflow = new StateGraph<GraphState>(); // Removed schema property
+  const workflow = new StateGraph<GraphState>({
+    channels: {
+      filePaths: {
+        value: (x, y) => x.concat(y),
+        default: (): string[] => [],
+      },
+      documents: {
+        value: (x, y) => x.concat(y),
+        default: (): LoadedDocument[] => [],
+      },
+      chunks: {
+        value: (x, y) => x.concat(y),
+        default: (): Document[] => [],
+      },
+      processedChunks: {
+        value: (x, y) => (x ?? 0) + (y ?? 0),
+        default: (): number => 0,
+      },
+    },
+  });
 
   workflow.addNode("load", load);
   workflow.addNode("split", split);

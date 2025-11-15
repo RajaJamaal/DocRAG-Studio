@@ -22,7 +22,8 @@
     "langchain": "^0.2.5",
     "@langchain/openai": "^0.2.1",
     "@langchain/langgraph": "^0.0.1",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "@langchain/core": "^0.2.5"
   },
   "devDependencies": {
     "@types/next": "^8.0.7",
