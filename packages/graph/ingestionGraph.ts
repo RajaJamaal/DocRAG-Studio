@@ -10,12 +10,18 @@ import type { LoadedDocument } from "../ingestion/loaders.js"; // Import LoadedD
 // Zod schema for the graph state
 const graphStateSchema = z.object({
   filePaths: z.array(z.string()),
-  documents: z.array(z.object({
+  documents: z.array(
+    z.object({
+      id: z.string(),
+      pageContent: z.string(),
+      metadata: z.record(z.unknown()).optional(),
+    })
+  ).optional(),
+  chunks: z.array(z.object({
     id: z.string(),
     pageContent: z.string(),
     metadata: z.record(z.unknown()).optional(),
   })).optional(),
-  chunks: z.array(z.any()).optional(),
   processedChunks: z.number().optional(),
 });
 
@@ -29,14 +35,14 @@ async function load(state: GraphState): Promise<Partial<GraphState>> {
 
 async function split(state: GraphState): Promise<Partial<GraphState>> {
   console.log("---SPLITTING DOCUMENTS---");
-  const chunks = await splitDocuments(state.documents as LoadedDocument[]);
+  const chunks = await splitDocuments(state.documents as LoadedDocument[]); // No change needed here, but the schema is now correct
   return { chunks };
 }
 
 async function embed(state: GraphState): Promise<Partial<GraphState>> {
   console.log("---GENERATING EMBEDDINGS---");
   const chunksWithEmbeddings = await generateEmbeddings(state.chunks as Document[]);
-  return { chunks: chunksWithEmbeddings };
+  return { chunks: chunksWithEmbeddings as LoadedDocument[] };
 }
 
 async function store(state: GraphState): Promise<Partial<GraphState>> {
@@ -48,22 +54,10 @@ async function store(state: GraphState): Promise<Partial<GraphState>> {
 export function buildIngestionGraph() {
   const workflow = new StateGraph<GraphState>({
     channels: {
-      filePaths: {
-        value: (x, y) => x.concat(y),
-        default: (): string[] => [],
-      },
-      documents: {
-        value: (x, y) => x.concat(y),
-        default: (): LoadedDocument[] => [],
-      },
-      chunks: {
-        value: (x, y) => x.concat(y),
-        default: (): Document[] => [],
-      },
-      processedChunks: {
-        value: (x, y) => (x ?? 0) + (y ?? 0),
-        default: (): number => 0,
-      },
+      filePaths: { value: null },
+      documents: { value: null },
+      chunks: { value: null },
+      processedChunks: { value: null },
     },
   });
 

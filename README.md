@@ -40,7 +40,7 @@ npm install
 Copy `.env.example` to `.env` and add your OpenAI API key:
 ```
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5-nano
 ```
 
 ### 3. Ingest a sample document

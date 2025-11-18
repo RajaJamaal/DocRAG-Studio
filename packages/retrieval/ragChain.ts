@@ -45,7 +45,7 @@ export async function answerQuery(
   const topK = opts?.topK ?? 3;
 
   const model = new ChatOpenAI({
-    modelName: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
+    modelName: process.env.OPENAI_MODEL || "gpt-5-nano",
     temperature: 0,
   });
 
@@ -87,7 +87,7 @@ export async function* streamAnswerQuery(
   const topK = opts?.topK ?? 3;
 
   const model = new ChatOpenAI({
-    modelName: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
+    modelName: process.env.OPENAI_MODEL || "gpt-5-nano",
     temperature: 0,
     streaming: true, // Enable streaming
   });
