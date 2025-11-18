@@ -4,7 +4,6 @@ import { buildIngestionGraph } from "../graph/ingestionGraph.js";
 const tracer = trace.getTracer("ingestion");
 
 
-// Sample document for testing
 const SAMPLE_TEXT = `
 DocRAG Studio - Document Processing Demo
 
@@ -26,20 +25,26 @@ Future improvements:
 `;
 
 async function main() {
+  const cliPaths = process.argv.slice(2);
+  const usingSample = cliPaths.length === 0;
+
   return tracer.startActiveSpan("main", async (span) => {
-    // Write sample text to data/sample.txt
-    await tracer.startActiveSpan("createSampleFile", async (span) => {
-      const fs = await import("fs/promises");
-      await fs.mkdir("./data", { recursive: true });
-      await fs.writeFile("./data/sample.txt", SAMPLE_TEXT);
-      console.log("✓ Created sample.txt");
-      span.end();
-    });
+    if (usingSample) {
+      await tracer.startActiveSpan("createSampleFile", async (span) => {
+        const fs = await import("fs/promises");
+        await fs.mkdir("./data", { recursive: true });
+        await fs.writeFile("./data/sample.txt", SAMPLE_TEXT);
+        console.log("✓ Created sample.txt");
+        span.end();
+      });
+    }
 
     // Build and run ingestion graph
     const graph = buildIngestionGraph();
     const finalState = await tracer.startActiveSpan("ingestionGraph.invoke", async (span) => {
-      const finalState = await graph.invoke({ filePaths: ["./data/sample.txt"] });
+      const filePaths = usingSample ? ["./data/sample.txt"] : cliPaths;
+      console.log("Starting ingestion for:", filePaths.join(", "));
+      const finalState = await graph.invoke({ filePaths });
       console.log("✓ Ingestion complete:", finalState);
       span.end();
       return finalState;
