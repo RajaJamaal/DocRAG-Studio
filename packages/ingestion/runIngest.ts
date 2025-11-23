@@ -29,22 +29,21 @@ async function main() {
   const usingSample = cliPaths.length === 0;
 
   return tracer.startActiveSpan("main", async (span) => {
-    if (usingSample) {
-      await tracer.startActiveSpan("createSampleFile", async (span) => {
-        const fs = await import("fs/promises");
-        await fs.mkdir("./data", { recursive: true });
-        await fs.writeFile("./data/sample.txt", SAMPLE_TEXT);
-        console.log("✓ Created sample.txt");
-        span.end();
-      });
-    }
+    // Write sample text to data/sample.txt
+    await tracer.startActiveSpan("createSampleFile", async (span) => {
+      const fs = await import("fs/promises");
+      const { DATA_DIR, SAMPLE_FILE } = await import("../config/index.js");
+      await fs.mkdir(DATA_DIR, { recursive: true });
+      await fs.writeFile(SAMPLE_FILE, SAMPLE_TEXT);
+      console.log("✓ Created sample.txt");
+      span.end();
+    });
 
     // Build and run ingestion graph
     const graph = buildIngestionGraph();
     const finalState = await tracer.startActiveSpan("ingestionGraph.invoke", async (span) => {
-      const filePaths = usingSample ? ["./data/sample.txt"] : cliPaths;
-      console.log("Starting ingestion for:", filePaths.join(", "));
-      const finalState = await graph.invoke({ filePaths });
+      const { SAMPLE_FILE } = await import("../config/index.js");
+      const finalState = await graph.invoke({ filePaths: [SAMPLE_FILE] });
       console.log("✓ Ingestion complete:", finalState);
       span.end();
       return finalState;

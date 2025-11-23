@@ -15,10 +15,32 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000"
 export default function Home() {
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [question, setQuestion] = useState("");
-  const [files, setFiles] = useState<UploadPreview[]>([]);
-  const [status, setStatus] = useState("Drop your documents to prepare an ingest run.");
+  const [uploadStatus, setUploadStatus] = useState("");
+
+  async function handleUpload(e: any) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadStatus("Uploading...");
+    try {
+      const res = await fetch("http://localhost:3000/api/routes/upload", {
+        method: "POST",
+        headers: {
+          "X-File-Name": file.name,
+        },
+        body: file,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
+      }
+
+      setUploadStatus(`Success: ${file.name} ingested.`);
+    } catch (err) {
+      setUploadStatus(`Error: ${(err as Error).message}`);
+    }
+  }
 
   const suggestions = useMemo(
     () => [
@@ -30,143 +52,57 @@ export default function Home() {
     []
   );
 
-  function formatSize(bytes: number) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  function handleFileSelection(list: FileList | null) {
-    if (!list || list.length === 0) return;
-    const previews: UploadPreview[] = Array.from(list).map((file) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}`,
-      name: file.name,
-      size: formatSize(file.size),
-      status: "pending",
-    }));
-    setFiles(previews);
-    setStatus("Docs staged. Run ingestion to embed them, then ask a question below.");
-  }
-
-  async function handleQuery(e: React.FormEvent<HTMLFormElement>) {
+  async function handleQuery(e: any) {
     e.preventDefault();
-    if (!question.trim()) return;
     setAnswer("");
-    setError(null);
     setLoading(true);
-    setStatus("Querying vector store...");
-
-    const url = `${API_BASE}/api/routes/query-stream?q=${encodeURIComponent(question.trim())}`;
-    const es = new EventSource(url);
-
+    const q = e.target.query.value;
+    const es = new EventSource(`http://localhost:3000/api/routes/query-stream?q=${encodeURIComponent(q)}`);
+    es.onmessage = (event) => {
+      // fallback for default event
+      setAnswer((prev) => prev + event.data);
+    };
     es.addEventListener("token", (event: MessageEvent) => {
       const { token } = JSON.parse(event.data);
       setAnswer((prev) => prev + token);
     });
-
     es.addEventListener("done", () => {
       setLoading(false);
-      setStatus("Ready for the next question.");
       es.close();
     });
-
     es.addEventListener("error", (event: MessageEvent) => {
       setLoading(false);
-      setStatus("Something went wrong.");
-      setError(event.data || "Unknown streaming error");
       es.close();
+      setAnswer((prev) => prev + "\n[Error: " + event.data + "]");
     });
   }
 
   return (
-    <div className="page-shell">
-      <main className="dashboard">
-        <section className="panel upload-panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Step 1 · Prep</p>
-              <h2>Upload documents</h2>
-            </div>
-            <span className="status-pill">{files.length ? "Staged" : "Idle"}</span>
-          </div>
+    <main className="p-8 max-w-2xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">DocRAG Studio</h1>
 
-          <label className="dropzone">
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.txt,.docx"
-              onChange={(event) => handleFileSelection(event.target.files)}
-            />
-            <div>
-              <p>Drop PDF, DOCX, or TXT files</p>
-              <p className="muted">They will be ingested into the local vector store.</p>
-            </div>
-            <span className="dropzone-button">Select files</span>
-          </label>
+      <div className="mb-8 p-4 border rounded bg-gray-50">
+        <h2 className="font-semibold mb-2">1. Upload Document</h2>
+        <input type="file" onChange={handleUpload} className="block w-full text-sm text-gray-500
+          file:mr-4 file:py-2 file:px-4
+          file:rounded-full file:border-0
+          file:text-sm file:font-semibold
+          file:bg-blue-50 file:text-blue-700
+          hover:file:bg-blue-100
+        "/>
+        {uploadStatus && <p className="mt-2 text-sm text-gray-600">{uploadStatus}</p>}
+      </div>
 
-          {files.length > 0 && (
-            <ul className="file-list">
-              {files.map((file) => (
-                <li key={file.id}>
-                  <div>
-                    <p>{file.name}</p>
-                    <p className="muted">{file.size}</p>
-                  </div>
-                  <span className={`file-badge ${file.status}`}>{file.status === "pending" ? "pending ingest" : "ready"}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <p className="hint">
-            After staging files, run <code>npm run ingest</code> in the repo root to chunk, embed, and store them.
-          </p>
-        </section>
-
-        <section className="panel query-panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Step 2 · Ask</p>
-              <h2>Query your knowledge base</h2>
-            </div>
-            <span className={`status-pill ${loading ? "busy" : ""}`}>{loading ? "Streaming…" : "Ready"}</span>
-          </div>
-
-          <form className="query-form" onSubmit={handleQuery}>
-            <textarea
-              rows={3}
-              placeholder="Ask about your docs..."
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-            />
-            <div className="form-footer">
-              <div className="suggestions">
-                {suggestions.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setQuestion(suggestion)}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-              <button type="submit" className="primary" disabled={loading}>
-                {loading ? "Generating…" : "Ask GPT-5 Nano"}
-              </button>
-            </div>
-          </form>
-
-          <div className="answer-panel">
-            <div className="answer-header">
-              <p className="eyebrow">Answer</p>
-              <span>{status}</span>
-            </div>
-            <pre>{answer || "Your response will stream here..."}</pre>
-            {error && <p className="error">Error: {error}</p>}
-          </div>
-        </section>
-      </main>
-    </div>
+      <div className="p-4 border rounded bg-white">
+        <h2 className="font-semibold mb-2">2. Ask Question</h2>
+        <form onSubmit={handleQuery} className="flex gap-2">
+          <input name="query" className="border p-2 w-full rounded" placeholder="Ask about your docs…" />
+          <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50">
+            {loading ? "Thinking…" : "Ask"}
+          </button>
+        </form>
+        <pre className="mt-4 whitespace-pre-wrap border p-4 min-h-[120px] bg-gray-50 rounded font-mono text-sm">{answer}</pre>
+      </div>
+    </main>
   );
 }
