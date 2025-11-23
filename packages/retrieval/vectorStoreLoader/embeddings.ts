@@ -13,7 +13,10 @@ function localEmbedding(text: string, dimension = 1536): number[] {
 
 export async function embedQuery(text: string): Promise<number[]> {
     if (process.env.OPENAI_API_KEY) {
-        const embeddings = new OpenAIEmbeddings();
+        const embeddings = new OpenAIEmbeddings({
+            modelName: "text-embedding-3-small",
+            dimensions: 1024,
+        });
         return embeddings.embedQuery(text);
     }
     return localEmbedding(text);

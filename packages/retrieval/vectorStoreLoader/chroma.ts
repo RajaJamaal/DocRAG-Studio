@@ -102,4 +102,15 @@ export class ChromaVectorStore implements VectorStoreLike {
             });
         }
     }
+
+    async hasDocument(source: string): Promise<boolean> {
+        const collection = await this.getCollection();
+        // Chroma 'get' supports 'where' filter
+        const result = await collection.get({
+            where: { source: source },
+            limit: 1
+        });
+
+        return result.ids.length > 0;
+    }
 }

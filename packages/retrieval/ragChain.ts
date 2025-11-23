@@ -46,7 +46,7 @@ export async function answerQuery(
 
   const model = new ChatOpenAI({
     modelName: process.env.OPENAI_MODEL || "gpt-5-nano",
-    temperature: 0,
+    temperature: 1,
   });
 
   const retrieverChain = RunnableSequence.from([
@@ -82,13 +82,13 @@ export async function answerQuery(
 export async function* streamAnswerQuery(
   retriever: RetrieverLike,
   query: string,
-  opts?: { topK?: number } 
+  opts?: { topK?: number }
 ): AsyncGenerator<string> {
   const topK = opts?.topK ?? 3;
 
   const model = new ChatOpenAI({
     modelName: process.env.OPENAI_MODEL || "gpt-5-nano",
-    temperature: 0,
+    temperature: 1,
     streaming: true, // Enable streaming
   });
 

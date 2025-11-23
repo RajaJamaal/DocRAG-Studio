@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { UPLOADS_DIR } from "../../../packages/config/index.js";
 import { buildIngestionGraph } from "../../../packages/graph/ingestionGraph.js";
+import { loadVectorStore } from "../../../packages/retrieval/vectorStoreLoader/index.js";
 
 // Local type fallbacks
 type NextApiRequest = import("http").IncomingMessage & {
@@ -38,6 +39,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             fs.mkdirSync(UPLOADS_DIR, { recursive: true });
         }
 
+        // Check for duplicates
+        const store = await loadVectorStore();
+        if (store.hasDocument && await store.hasDocument(filename)) {
+            console.log(`[route:upload] Document already exists: ${filename}`);
+            res.statusCode = 409;
+            res.json?.({ error: "Document already exists" });
+            return;
+        }
+
         const filePath = path.join(UPLOADS_DIR, filename);
         const writeStream = fs.createWriteStream(filePath);
 
@@ -52,11 +62,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Trigger ingestion
         console.log('[route:upload] Starting ingestion...');
         const graph = buildIngestionGraph();
-        const finalState = await graph.invoke({ filePaths: [filePath] });
-        console.log('[route:upload] Ingestion complete');
+        try {
+            const finalState = await graph.invoke({ filePaths: [filePath] });
+            console.log('[route:upload] Ingestion complete');
+            res.statusCode = 200;
+            res.json?.({ success: true, state: finalState });
+        } catch (ingestErr) {
+            console.error("[route:upload] Ingestion failed:", ingestErr);
+            // Cleanup file on failure
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                console.log(`[route:upload] Cleaned up file: ${filePath}`);
+            }
+            throw ingestErr;
+        }
 
-        res.statusCode = 200;
-        res.json?.({ success: true, state: finalState });
     } catch (err) {
         console.error("[route:upload] Error:", err);
         res.statusCode = 500;

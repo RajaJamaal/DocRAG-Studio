@@ -39,7 +39,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, traceparent, tracestate"
+    "Content-Type, Authorization, traceparent, tracestate, X-File-Name"
   );
 
   // Handle OPTIONS pre-flight requests
@@ -54,7 +54,7 @@ const server = http.createServer(async (req, res) => {
   console.log("[server] incoming", req.method, pathname);
 
   try {
-    if (pathname === "/api/routes/query" || pathname === "/api/routes/query-stream") {
+    if (pathname.startsWith("/api/routes/")) {
       console.log("[server] resolving handler for", pathname);
       const handler = await loadHandler(pathname);
       console.log("[server] loaded handler; invoking...");
@@ -84,4 +84,4 @@ server.listen(port, () => {
   console.log(`Dev API server listening on http://localhost:${port}`);
 });
 
-export {};
+export { };
