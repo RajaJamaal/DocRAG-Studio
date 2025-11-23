@@ -23,7 +23,7 @@ export default function Home() {
 
     setUploadStatus("Uploading...");
     try {
-      const res = await fetch("http://localhost:3000/api/routes/upload", {
+      const res = await fetch(`${API_BASE}/api/routes/upload`, {
         method: "POST",
         headers: {
           "X-File-Name": file.name,
@@ -57,7 +57,7 @@ export default function Home() {
     setAnswer("");
     setLoading(true);
     const q = e.target.query.value;
-    const es = new EventSource(`http://localhost:3000/api/routes/query-stream?q=${encodeURIComponent(q)}`);
+    const es = new EventSource(`${API_BASE}/api/routes/query-stream?q=${encodeURIComponent(q)}`);
     es.onmessage = (event) => {
       // fallback for default event
       setAnswer((prev) => prev + event.data);

@@ -27,7 +27,7 @@ function formatDocuments(docs: Document[]) {
   return docs.map((doc) => doc.pageContent).join("\n\n");
 }
 
-const PROMPT_TEMPLATE = `You are a helpful assistant. Use the provided context to answer the question below.
+const PROMPT_TEMPLATE = `You are a helpful assistant who responds ONLY to the provided context. Use ONLY AND ONLY the provided context to answer the question below. If there is no context, answer with "I don't know, Please provide context!". Do not provide any additional information or context.
 
 Context:
 {context}
