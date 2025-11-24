@@ -1,7 +1,7 @@
 "use client";
 import "../tracing";
 import "./page.css";
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
 
@@ -22,13 +22,28 @@ const AlertIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
 );
 
+type Message = {
+  role: "user" | "ai";
+  content: string;
+};
+
 export default function Home() {
-  const [answer, setAnswer] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [fileName, setFileName] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatHistoryRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    if (chatHistoryRef.current) {
+      chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   async function handleUpload(e: any) {
     const file = e.target.files[0];
@@ -63,30 +78,59 @@ export default function Home() {
   const suggestions = useMemo(
     () => [
       "What is DocRAG Studio?",
-      "How does ingestion work?",
-      "Summarize the sample document",
-      "What file types are supported?",
+      "Summarize the document",
+      "Key insights?",
     ],
     []
   );
 
   async function handleQuery(e: any) {
     e.preventDefault();
-    const q = e.target.query.value;
-    if (!q.trim()) return;
 
-    setAnswer("");
+    // Robustly get the query value
+    let q = "";
+    if (e.target.tagName === "FORM") {
+      q = (e.target.elements.namedItem("query") as HTMLTextAreaElement).value;
+    } else if (e.target.tagName === "TEXTAREA") {
+      q = e.target.value;
+    } else {
+      // Fallback for direct calls
+      q = formRef.current?.querySelector("textarea")?.value || "";
+    }
+
+    if (!q.trim()) return;
+    if (loading) return;
+
+    // Clear input
+    if (formRef.current) {
+      const textarea = formRef.current.querySelector("textarea");
+      if (textarea) textarea.value = "";
+    }
+
+    // Add user message
+    setMessages(prev => [...prev, { role: "user", content: q }]);
     setLoading(true);
+
+    // Create placeholder for AI response
+    setMessages(prev => [...prev, { role: "ai", content: "" }]);
 
     const es = new EventSource(`${API_BASE}/api/routes/query-stream?q=${encodeURIComponent(q)}`);
 
-    es.onmessage = (event) => {
-      setAnswer((prev) => prev + event.data);
-    };
-
     es.addEventListener("token", (event: MessageEvent) => {
       const { token } = JSON.parse(event.data);
-      setAnswer((prev) => prev + token);
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        const lastMsgIndex = newMsgs.length - 1;
+        const lastMsg = newMsgs[lastMsgIndex];
+
+        if (lastMsg && lastMsg.role === "ai") {
+          newMsgs[lastMsgIndex] = {
+            ...lastMsg,
+            content: lastMsg.content + token
+          };
+        }
+        return newMsgs;
+      });
     });
 
     es.addEventListener("done", () => {
@@ -97,22 +141,34 @@ export default function Home() {
     es.addEventListener("error", (event: MessageEvent) => {
       setLoading(false);
       es.close();
-      setAnswer((prev) => prev + "\n[Error: " + (event.data || "Connection failed") + "]");
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        const lastMsgIndex = newMsgs.length - 1;
+        const lastMsg = newMsgs[lastMsgIndex];
+
+        if (lastMsg && lastMsg.role === "ai") {
+          newMsgs[lastMsgIndex] = {
+            ...lastMsg,
+            content: lastMsg.content + "\n[Error: " + (event.data || "Connection failed") + "]"
+          };
+        }
+        return newMsgs;
+      });
     });
   }
 
   return (
     <div className="page-shell">
       <div className="dashboard">
-        {/* Left Panel: Upload */}
+        {/* Top Panel: Upload */}
         <div className="panel upload-panel">
           <div className="panel-header">
             <div>
-              <h2>Upload Documents</h2>
-              <p className="eyebrow">Knowledge Base</p>
+              <h2>Knowledge Base</h2>
+              <p className="eyebrow">Upload Documents</p>
             </div>
             <div className={`status-pill ${loading ? "busy" : ""}`}>
-              {loading ? "Processing Query..." : "System Ready"}
+              {loading ? "Thinking..." : "System Ready"}
             </div>
           </div>
 
@@ -122,7 +178,7 @@ export default function Home() {
           >
             <div>
               <p style={{ fontWeight: 600, color: "#e2e8f0" }}>
-                {fileName || "Choose a file"}
+                {fileName || "Choose a file to upload"}
               </p>
               <p className="muted">PDF, TXT, MD supported</p>
             </div>
@@ -159,63 +215,69 @@ export default function Home() {
           )}
         </div>
 
-        {/* Right Panel: Query */}
-        <div className="panel query-panel">
+        {/* Bottom Panel: Chat Interface */}
+        <div className="panel chat-panel">
           <div className="panel-header">
             <div>
-              <h2>Ask AI</h2>
+              <h2>Chat</h2>
               <p className="eyebrow">RAG Agent</p>
             </div>
           </div>
 
-          <form onSubmit={handleQuery} className="query-form">
-            <textarea
-              name="query"
-              rows={3}
-              placeholder="Ask a question about your documents..."
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleQuery(e);
-                }
-              }}
-            />
+          <div className="chat-history" ref={chatHistoryRef}>
+            {messages.length === 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.5 }}>
+                <p>Ask a question to start the conversation.</p>
+              </div>
+            )}
+            {messages.map((msg, i) => (
+              <div key={i} className={`message ${msg.role}`}>
+                <span className="message-role">{msg.role === 'user' ? 'You' : 'AI'}</span>
+                <div className="message-bubble">
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+          </div>
 
-            <div className="form-footer">
-              <div className="suggestions">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={(e) => {
-                      const form = (e.target as HTMLElement).closest("form");
-                      if (form) {
-                        const textarea = form.querySelector("textarea");
-                        if (textarea) {
-                          textarea.value = s;
-                          handleQuery({ preventDefault: () => { }, target: { query: { value: s } } });
-                        }
+          <div className="input-area">
+            <div className="suggestions">
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    if (formRef.current) {
+                      const textarea = formRef.current.querySelector("textarea");
+                      if (textarea) {
+                        textarea.value = s;
+                        handleQuery({ preventDefault: () => { }, target: formRef.current });
                       }
-                    }}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <button type="submit" disabled={loading} className="primary">
-                {loading ? "Thinking..." : <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>Send <SendIcon /></span>}
-              </button>
+                    }
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
-          </form>
 
-          {answer && (
-            <div className="answer-panel">
-              <div className="answer-header">
-                <span className="eyebrow">AI Response</span>
-              </div>
-              <pre>{answer}</pre>
-            </div>
-          )}
+            <form ref={formRef} onSubmit={handleQuery} className="query-form">
+              <textarea
+                name="query"
+                rows={1}
+                placeholder="Ask a question..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleQuery(e);
+                  }
+                }}
+              />
+              <button type="submit" disabled={loading} className="send-button">
+                <SendIcon />
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </div>

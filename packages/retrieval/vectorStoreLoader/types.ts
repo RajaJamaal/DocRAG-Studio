@@ -12,5 +12,5 @@ export type RetrieverLike = {
 
 export type VectorStoreLike = RetrieverLike & {
     addDocuments: (documents: Document[]) => Promise<void>;
-    hasDocument?: (source: string) => Promise<boolean>;
+    hasDocument(source: string, hash?: string): Promise<boolean>;
 };
