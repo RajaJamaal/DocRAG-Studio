@@ -3,27 +3,31 @@
 A modular Retrieval-Augmented Generation (RAG) web app for document Q&A with streaming answers and citations.
 
 ## Features
-- Upload documents (PDF, DOCX, TXT)
-- Ingestion pipeline: load → split → embed → store
-- Vector store: local JSON (FAISS-like), easy swap for Pinecone/Chroma
-- Query pipeline: retrieve → prompt → LLM → answer with citations
-- Streaming UI: token-by-token updates via SSE
-- Structured output parsing for reliable citations
-- Modular, extensible TypeScript/Next.js codebase
+- **File Upload**: Drag & drop interface for PDF, DOCX, and TXT files.
+- **Robust Ingestion**:
+    - **Duplicate Prevention**: SHA-256 content hashing prevents re-uploading the same file.
+    - **Vector Store Adapters**: Seamlessly switch between Local JSON, Pinecone, and ChromaDB.
+- **Advanced RAG**:
+    - **Streaming Answers**: Token-by-token updates via SSE.
+    - **Citations**: Reliable source tracking.
+- **Modern UI**:
+    - **Vertical Layout**: Upload panel on top, chat interface below.
+    - **Chat History**: Full conversation history with user and AI messages.
+    - **Glassmorphism Design**: Premium dark theme with blur effects.
 
 ## Architecture
 ```
 docrag-studio/
 ├── apps/
-│   ├── web/                  # Next.js UI (React, SSE client)
-│   └── api/                  # Next.js API routes (query, query-stream)
+│   ├── web/                  # Next.js UI (React, SSE client) - Port 3000
+│   └── api/                  # Node.js API Server - Port 3001
+│       └── routes/           # Upload, Query, Query-Stream endpoints
 ├── packages/
-│   ├── ingestion/            # loaders, splitters, embeddings, store
-│   ├── retrieval/            # vectorStoreLoader, ragChain
-│   └── graph/                # LangGraph workflow definitions
-├── data/                     # persisted vectorstore, checkpoints
-├── .env.example              # environment variable template
-├── package.json              # root scripts/deps
+│   ├── ingestion/            # Loaders, splitters, embeddings, hashing
+│   ├── retrieval/            # Vector store adapters (Local, Pinecone, Chroma)
+│   └── config/               # Centralized configuration
+├── data/                     # Persisted vectorstore, uploads
+├── .env                      # Environment variables
 └── README.md
 ```
 
@@ -32,58 +36,48 @@ docrag-studio/
 ### 1. Install dependencies
 ```bash
 npm install
-cd apps/web
-npm install
 ```
 
 ### 2. Configure environment
-Copy `.env.example` to `.env` and add your OpenAI API key:
-```
+Copy `.env.example` to `.env` and set your keys:
+```bash
+# Core
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5-nano
+PORT=3001
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+
+# Vector Store (Choose one: local, pinecone, chroma)
+VECTOR_STORE_PROVIDER=local
+
+# Pinecone (Optional)
+PINECONE_API_KEY=...
+PINECONE_INDEX=...
+
+# Chroma (Optional)
+CHROMA_API_KEY=...
 ```
 
-### 3. Ingest a sample document
+### 3. Start the Development Server
+This will start both the backend API (port 3001) and the frontend UI (port 3000).
 ```bash
-npm run ingest
-```
-This creates `data/vectorstore.json`.
+# Terminal 1: Start Backend
+npm run dev:api
 
-### 4. Start the Next.js app
-```bash
+# Terminal 2: Start Frontend
 cd apps/web
 npm run dev
 ```
-Visit [http://localhost:3000](http://localhost:3000) and ask questions about your docs.
 
-## Streaming Answers
-- The `/api/query-stream` endpoint streams OpenAI tokens as SSE.
-- The UI updates token-by-token for fast feedback.
+Visit [http://localhost:3000](http://localhost:3000) to upload documents and chat!
 
 ## Customization
-- **Vector store:**
-  - Default: local JSON (FAISS-like)
-  - To use Pinecone/Chroma: swap logic in `packages/retrieval/vectorStoreLoader.ts` and add provider keys to `.env`
-- **LLM:**
-  - Uses OpenAI Chat Completion API (GPT-4o-mini by default)
-  - Change model in `.env` as needed
-- **Output parsing:**
-  - Structured citations via OutputParser (JSON)
-  - Fallback to regex if model output is not valid JSON
-
-## Extending
-- Add new document loaders in `packages/ingestion/loaders.ts`
-- Add new vector store adapters in `packages/retrieval/vectorStoreLoader.ts`
-- Add new workflow nodes in `packages/graph/ingestionGraph.ts`
-- Add authentication, progress UI, or deploy to Vercel/Railway for production
+- **Vector Store**: Change `VECTOR_STORE_PROVIDER` in `.env` to switch providers instantly.
+- **LLM**: Uses OpenAI Chat Completion. Adjust model/temperature in `packages/retrieval/ragChain.ts`.
+- **UI**: Modify `apps/web/app/page.tsx` and `page.css` for frontend changes.
 
 ## Troubleshooting
-- If you see `OPENAI_API_KEY=missing`, check your `.env` file
-- If `data/vectorstore.json` is missing, run ingestion again
-- For Pinecone/Chroma, install provider SDK and update loader logic
+- **Duplicate Uploads**: The system uses SHA-256 hashing. If you try to upload the same file content (even with a different name), it will be rejected with a 409 Conflict.
+- **Dimension Mismatch**: Ensure your embedding model dimensions match your vector store index (default: 1024 for `text-embedding-3-small`).
 
 ## License
 MIT
-
----
-For questions or contributions, open an issue or PR!
