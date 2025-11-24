@@ -19,7 +19,10 @@ export async function generateEmbeddings(chunks: Document[]): Promise<Document[]
   if (!process.env.OPENAI_API_KEY) {
     vectors = chunkContents.map((content) => localEmbedding(content));
   } else {
-    const embeddings = new OpenAIEmbeddings();
+    const embeddings = new OpenAIEmbeddings({
+      modelName: "text-embedding-3-small",
+      dimensions: 1024,
+    });
     try {
       vectors = await embeddings.embedDocuments(chunkContents);
     } catch (error) {

@@ -42,11 +42,14 @@ export class PineconeVectorStore implements VectorStoreLike {
             if (!values) {
                 values = await embedQuery(doc.pageContent);
             }
+            // Extract embedding from metadata to avoid sending it as metadata to Pinecone
+            const { embedding, ...restMetadata } = doc.metadata || {};
+
             return {
                 id: (doc.metadata?.id as string) || crypto.randomUUID(),
                 values,
                 metadata: {
-                    ...doc.metadata,
+                    ...restMetadata,
                     text: doc.pageContent, // Store text in metadata for retrieval
                 },
             };

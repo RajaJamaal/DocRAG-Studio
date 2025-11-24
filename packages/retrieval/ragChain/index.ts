@@ -32,8 +32,8 @@ async function callOpenAIChat(prompt: string) {
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || "gpt-5-nano",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.0,
-      max_tokens: 800,
+      temperature: 1,
+      max_tokens: 200,
     }),
   });
 
@@ -56,7 +56,7 @@ function parseStructuredOutput(text: string) {
     if (match) {
       return JSON.parse(match[0]);
     }
-  } catch {}
+  } catch { }
   return null;
 }
 
