@@ -39,25 +39,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             fs.mkdirSync(UPLOADS_DIR, { recursive: true });
         }
 
-        // Check for duplicates
+        const filePath = path.join(UPLOADS_DIR, filename);
+        const writeStream = fs.createWriteStream(filePath);
+
+        // Calculate hash on the fly
+        const crypto = await import("crypto");
+        const hashStream = crypto.createHash("sha256");
+
+        await new Promise((resolve, reject) => {
+            req.on("data", (chunk) => {
+                writeStream.write(chunk);
+                hashStream.update(chunk);
+            });
+            req.on("end", () => {
+                writeStream.end();
+                resolve(null);
+            });
+            req.on("error", (err) => {
+                writeStream.end();
+                reject(err);
+            });
+        });
+
+        const fileHash = hashStream.digest("hex");
+        console.log(`[route:upload] File saved to ${filePath} (hash: ${fileHash})`);
+
+        // Check for duplicates using hash
         const store = await loadVectorStore();
-        if (store.hasDocument && await store.hasDocument(filename)) {
-            console.log(`[route:upload] Document already exists: ${filename}`);
+        if (store.hasDocument && await store.hasDocument(filename, fileHash)) {
+            console.log(`[route:upload] Duplicate detected: ${filename} (hash match)`);
+            // Cleanup
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
             res.statusCode = 409;
             res.json?.({ error: "Document already exists" });
             return;
         }
-
-        const filePath = path.join(UPLOADS_DIR, filename);
-        const writeStream = fs.createWriteStream(filePath);
-
-        await new Promise((resolve, reject) => {
-            req.pipe(writeStream);
-            req.on("end", resolve);
-            req.on("error", reject);
-        });
-
-        console.log(`[route:upload] File saved to ${filePath}`);
 
         // Trigger ingestion
         console.log('[route:upload] Starting ingestion...');

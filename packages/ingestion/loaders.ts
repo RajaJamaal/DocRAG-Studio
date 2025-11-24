@@ -16,20 +16,32 @@ export async function loadDocuments(filePaths: string[]): Promise<LoadedDocument
     const ext = path.extname(filePath).toLowerCase();
     const basename = path.basename(filePath);
 
+    let content = "";
     if (ext === ".txt") {
-      const raw = await fs.readFile(filePath, "utf-8");
-      docs.push({ id: basename, pageContent: raw, metadata: { source: basename } });
+      content = await fs.readFile(filePath, "utf-8");
     } else if (ext === ".pdf") {
       const data = await fs.readFile(filePath);
       const parsed = await pdfParse(data);
-      docs.push({ id: basename, pageContent: parsed.text, metadata: { source: basename } });
+      content = parsed.text;
     } else if (ext === ".docx") {
       const buffer = await fs.readFile(filePath);
       const res = await mammoth.extractRawText({ buffer });
-      docs.push({ id: basename, pageContent: res.value, metadata: { source: basename } });
+      content = res.value;
     } else {
       throw new Error(`Unsupported file type: ${ext}`);
     }
+
+    // Calculate hash
+    const hash = await import("crypto").then(c => c.createHash("sha256").update(content).digest("hex"));
+
+    docs.push({
+      id: basename,
+      pageContent: content,
+      metadata: {
+        source: basename,
+        hash
+      }
+    });
   }
 
   console.log(`Loaded ${docs.length} document(s)`);

@@ -103,11 +103,17 @@ export class ChromaVectorStore implements VectorStoreLike {
         }
     }
 
-    async hasDocument(source: string): Promise<boolean> {
+    async hasDocument(source: string, hash?: string): Promise<boolean> {
         const collection = await this.getCollection();
-        // Chroma 'get' supports 'where' filter
+        let where: any;
+        if (hash) {
+            where = { hash };
+        } else {
+            where = { source };
+        }
+
         const result = await collection.get({
-            where: { source: source },
+            where,
             limit: 1
         });
 

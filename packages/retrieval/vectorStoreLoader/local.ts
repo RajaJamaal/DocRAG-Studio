@@ -109,4 +109,11 @@ export class LocalVectorStore implements VectorStoreLike {
         await fs.mkdir(path.dirname(VECTOR_STORE_FILE), { recursive: true });
         await fs.writeFile(VECTOR_STORE_FILE, JSON.stringify(this.vectors, null, 2));
     }
+    async hasDocument(source: string, hash?: string): Promise<boolean> {
+        await this.init();
+        if (hash) {
+            return this.vectors.some(v => v.metadata?.hash === hash);
+        }
+        return this.vectors.some(v => v.metadata?.source === source);
+    }
 }
