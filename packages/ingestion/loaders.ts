@@ -18,15 +18,15 @@ export async function loadDocuments(filePaths: string[]): Promise<LoadedDocument
 
     if (ext === ".txt") {
       const raw = await fs.readFile(filePath, "utf-8");
-      docs.push({ id: basename, pageContent: raw, metadata: { source: filePath } });
+      docs.push({ id: basename, pageContent: raw, metadata: { source: basename } });
     } else if (ext === ".pdf") {
       const data = await fs.readFile(filePath);
       const parsed = await pdfParse(data);
-      docs.push({ id: basename, pageContent: parsed.text, metadata: { source: filePath } });
+      docs.push({ id: basename, pageContent: parsed.text, metadata: { source: basename } });
     } else if (ext === ".docx") {
       const buffer = await fs.readFile(filePath);
       const res = await mammoth.extractRawText({ buffer });
-      docs.push({ id: basename, pageContent: res.value, metadata: { source: filePath } });
+      docs.push({ id: basename, pageContent: res.value, metadata: { source: basename } });
     } else {
       throw new Error(`Unsupported file type: ${ext}`);
     }

@@ -17,7 +17,9 @@ export async function embedQuery(text: string): Promise<number[]> {
             modelName: "text-embedding-3-small",
             dimensions: 1024,
         });
-        return embeddings.embedQuery(text);
+        const res = await embeddings.embedQuery(text);
+        console.log(`[embeddings] Generated embedding with dimension: ${res.length}`);
+        return res;
     }
     return localEmbedding(text);
 }

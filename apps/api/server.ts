@@ -58,6 +58,13 @@ const server = http.createServer(async (req, res) => {
       console.log("[server] resolving handler for", pathname);
       const handler = await loadHandler(pathname);
       console.log("[server] loaded handler; invoking...");
+
+      // Attach json helper
+      (res as any).json = (body: any) => {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(body));
+      };
+
       await handler(req as any, res as any);
       console.log("[server] handler completed");
       return;

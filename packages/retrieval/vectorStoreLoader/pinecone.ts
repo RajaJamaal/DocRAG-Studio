@@ -14,6 +14,26 @@ export class PineconeVectorStore implements VectorStoreLike {
         this.indexName = process.env.PINECONE_INDEX || "docrag-studio-index";
     }
 
+    async hasDocument(source: string): Promise<boolean> {
+        const index = this.client.index(this.indexName);
+        // Query for any vector with this source
+        // We use a dummy vector of 0s because query requires a vector, 
+        // but we only care about the filter match.
+        // Pinecone requires a vector for query, even if filtering.
+        // Alternatively, we can use 'list' or 'fetch' if we knew IDs, but we don't.
+        // A query with filter is the standard way to check existence by metadata.
+        const results = await index.query({
+            vector: new Array(1024).fill(0),
+            topK: 1,
+            filter: {
+                source: { $eq: source }
+            },
+            includeMetadata: false
+        });
+
+        return results.matches.length > 0;
+    }
+
     async similaritySearch(query: string, k = 3): Promise<DocumentLike[]> {
         const vector = await embedQuery(query);
         const index = this.client.index(this.indexName);
