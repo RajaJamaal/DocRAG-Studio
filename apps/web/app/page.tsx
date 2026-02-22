@@ -26,6 +26,7 @@ type Message = {
   role: "user" | "ai";
   content: string;
   sources?: Array<{
+    ref?: number;
     id?: string;
     title?: string;
     snippet?: string;
@@ -43,6 +44,34 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatHistoryRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  function formatInlineCitations(
+    content: string,
+    sources: Array<{ ref?: number; id?: string; title?: string }>
+  ): string {
+    const citationGroupRegex = /(?:\s*\[source:\d+\]\s*)+/gi;
+
+    return content.replace(citationGroupRegex, (group: string) => {
+      const refs = Array.from(group.matchAll(/\[source:(\d+)\]/gi))
+        .map((match) => Number.parseInt(match[1], 10))
+        .filter((ref) => !Number.isNaN(ref));
+
+      if (refs.length === 0) return group;
+
+      const labels: string[] = [];
+      const seen = new Set<string>();
+
+      for (const ref of refs) {
+        const source = sources.find((s) => s.ref === ref);
+        const label = source?.title || source?.id || `source:${ref}`;
+        if (seen.has(label)) continue;
+        seen.add(label);
+        labels.push(`[${label}]`);
+      }
+
+      return labels.length > 0 ? ` (source: ${labels.join(", ")})` : group;
+    });
+  }
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -146,7 +175,7 @@ export default function Home() {
 
     es.addEventListener("sources", (event: MessageEvent) => {
       const { sources } = JSON.parse(event.data) as {
-        sources?: Array<{ id?: string; title?: string; snippet?: string }>;
+        sources?: Array<{ ref?: number; id?: string; title?: string; snippet?: string }>;
       };
 
       if (!Array.isArray(sources)) return;
@@ -159,6 +188,7 @@ export default function Home() {
         if (lastMsg && lastMsg.role === "ai") {
           newMsgs[lastMsgIndex] = {
             ...lastMsg,
+            content: formatInlineCitations(lastMsg.content, sources),
             sources,
           };
         }
@@ -286,13 +316,21 @@ export default function Home() {
                   {msg.content}
                 </div>
                 {msg.role === "ai" && msg.sources && msg.sources.length > 0 && (
-                  <div className="message-sources">
-                    {msg.sources.map((source, idx) => (
-                      <div key={`${source.id || source.title || "source"}-${idx}`} className="source-chip">
-                        {source.title || source.id || `source:${idx}`}
-                      </div>
-                    ))}
-                  </div>
+                  <details className="message-citations">
+                    <summary>Sources ({msg.sources.length})</summary>
+                    <ul className="citation-list">
+                      {msg.sources.map((source, idx) => (
+                        <li key={`${source.id || source.title || "source"}-${idx}`} className="citation-item">
+                          <span className="source-chip">
+                            {source.title || source.id || `source:${idx + 1}`}
+                          </span>
+                          {source.snippet && (
+                            <p className="source-snippet">{source.snippet}</p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 )}
               </div>
             ))}

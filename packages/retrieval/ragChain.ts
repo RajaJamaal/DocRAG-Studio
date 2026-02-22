@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { ChatOpenAI } from "@langchain/openai";
+import path from "path";
 import type { RetrieverLike } from "./vectorStoreLoader/index.js";
 
 const NO_CONTEXT_FALLBACK = "I don't know, Please provide context!";
 
 const sourceSchema = z.object({
+  ref: z.number().optional(),
   id: z.string().optional(),
   title: z.string().optional(),
   snippet: z.string(),
@@ -83,19 +85,30 @@ function extractCitationIndexes(answer: string): number[] {
 
 function buildSources(contexts: RetrievedContext[], answer: string): RAGSource[] {
   const citationIndexes = extractCitationIndexes(answer);
-  const sources = citationIndexes
-    .map((idx) => {
-      const ctx = contexts[idx];
-      if (!ctx) return null;
-      return {
-        id: (ctx.metadata?.id as string | undefined) ?? `${idx}`,
-        title: ctx.metadata?.title as string | undefined,
-        snippet: ctx.pageContent.slice(0, 500),
-        metadata: ctx.metadata,
-      } satisfies RAGSource;
-    })
-    .filter((source): source is RAGSource => Boolean(source));
-
+  const indexesToUse =
+    citationIndexes.length > 0
+      ? citationIndexes
+      : contexts.map((_, idx) => idx).slice(0, 3);
+  const sources: RAGSource[] = [];
+  for (const idx of indexesToUse) {
+    const ctx = contexts[idx];
+    if (!ctx) continue;
+    const rawSourceName =
+      typeof ctx.metadata?.source === "string" ? (ctx.metadata.source as string) : undefined;
+    const sourceName = rawSourceName ? path.basename(rawSourceName) : undefined;
+    const sourceTitle =
+      typeof ctx.metadata?.title === "string" ? (ctx.metadata.title as string) : sourceName;
+    const sourceId =
+      sourceName ??
+      (typeof ctx.metadata?.id === "string" ? (ctx.metadata.id as string) : `${idx}`);
+    sources.push({
+      ref: idx,
+      id: sourceId,
+      title: sourceTitle,
+      snippet: ctx.pageContent.slice(0, 500),
+      metadata: ctx.metadata,
+    });
+  }
   return sources;
 }
 

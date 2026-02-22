@@ -3,13 +3,13 @@
 A modular Retrieval-Augmented Generation (RAG) web app for document Q&A with streaming answers and citations.
 
 ## Features
-- **File Upload**: Drag & drop interface for PDF, DOCX, and TXT files.
+- **File Upload**: Drag & drop interface for PDF, DOCX, TXT, and MD files.
 - **Robust Ingestion**:
     - **Duplicate Prevention**: SHA-256 content hashing prevents re-uploading the same file.
     - **Vector Store Adapters**: Seamlessly switch between Local JSON, Pinecone, and ChromaDB.
 - **Advanced RAG**:
     - **Streaming Answers**: Token-by-token updates via SSE.
-    - **Citations**: Reliable source tracking.
+    - **Citations**: Source metadata is returned for both sync and streaming responses.
 - **Modern UI**:
     - **Vertical Layout**: Upload panel on top, chat interface below.
     - **Chat History**: Full conversation history with user and AI messages.
@@ -43,6 +43,7 @@ Copy `.env.example` to `.env` and set your keys:
 ```bash
 # Core
 OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5-nano
 PORT=3001
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 
@@ -54,7 +55,9 @@ PINECONE_API_KEY=...
 PINECONE_INDEX=...
 
 # Chroma (Optional)
+CHROMA_API_URL=http://localhost:8000
 CHROMA_API_KEY=...
+CHROMA_COLLECTION=docrag-studio-collection
 ```
 
 ### 3. Start the Development Server
@@ -76,7 +79,7 @@ Visit [http://localhost:3000](http://localhost:3000) to upload documents and cha
 - **UI**: Modify `apps/web/app/page.tsx` and `page.css` for frontend changes.
 
 ## Troubleshooting
-- **Duplicate Uploads**: The system uses SHA-256 hashing. If you try to upload the same file content (even with a different name), it will be rejected with a 409 Conflict.
+- **Duplicate Uploads**: The system uses SHA-256 hashing on uploaded file bytes. If you try to upload the same file content (even with a different name), it will be rejected with a 409 Conflict.
 - **Dimension Mismatch**: Ensure your embedding model dimensions match your vector store index (default: 1024 for `text-embedding-3-small`).
 
 ## License
