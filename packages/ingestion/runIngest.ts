@@ -21,7 +21,7 @@ Future improvements:
 - Add support for more file types
 - Implement progress tracking
 - Add batch processing
-- Stream results to UI
+- Add source deep-links to exact supporting chunks
 `;
 
 async function main() {

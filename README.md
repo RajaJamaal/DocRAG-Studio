@@ -10,9 +10,13 @@ A modular Retrieval-Augmented Generation (RAG) web app for document Q&A with str
 - **Advanced RAG**:
     - **Streaming Answers**: Token-by-token updates via SSE.
     - **Citations**: Source metadata is returned for both sync and streaming responses.
+    - **Strict Grounding**: If context is insufficient, the assistant returns `I don't know, Please provide context!` and no sources are shown.
 - **Modern UI**:
     - **Vertical Layout**: Upload panel on top, chat interface below.
     - **Chat History**: Full conversation history with user and AI messages.
+    - **Readable AI Responses**: Markdown-like headings/lists are rendered as structured blocks.
+    - **Inline Citations**: In-answer citations are formatted as `(source: [filename])`.
+    - **Thinking Indicator**: Animated AI typing state is shown in the chat bubble until the first token streams.
     - **Glassmorphism Design**: Premium dark theme with blur effects.
 
 ## Architecture
@@ -58,6 +62,8 @@ PINECONE_INDEX=...
 CHROMA_API_URL=http://localhost:8000
 CHROMA_API_KEY=...
 CHROMA_COLLECTION=docrag-studio-collection
+# Optional legacy alias supported by code:
+# CHROMA_COLLECTION_NAME=docrag-studio-collection
 ```
 
 ### 3. Start the Development Server
@@ -81,6 +87,7 @@ Visit [http://localhost:3000](http://localhost:3000) to upload documents and cha
 ## Troubleshooting
 - **Duplicate Uploads**: The system uses SHA-256 hashing on uploaded file bytes. If you try to upload the same file content (even with a different name), it will be rejected with a 409 Conflict.
 - **Dimension Mismatch**: Ensure your embedding model dimensions match your vector store index (default: 1024 for `text-embedding-3-small`).
+- **No Source Links on Fallback**: This is expected. If the answer is `I don't know, Please provide context!`, the response is intentionally treated as ungrounded and sources are omitted.
 
 ## License
 MIT

@@ -47,6 +47,14 @@ async function main() {
     includes(ragChain, `type: "sources"`),
     "RAG streaming chain does not produce source events"
   );
+  assert(
+    includes(ragChain, "function isNoContextAnswer"),
+    "RAG chain missing no-context answer guard helper"
+  );
+  assert(
+    includes(ragChain, "if (isNoContextAnswer(answer))"),
+    "RAG chain still allows sources for no-context fallback answers"
+  );
 
   // 3) File support contract: UI, loader, README stay aligned.
   assert(
@@ -63,6 +71,14 @@ async function main() {
     includes(readme, /PDF,\s*DOCX,\s*TXT,\s*and\s*MD/i),
     "README file support claim is not aligned"
   );
+  assert(
+    includes(readme, "Strict Grounding"),
+    "README missing strict grounding behavior note"
+  );
+  assert(
+    includes(readme, "no sources are shown"),
+    "README missing no-sources-on-fallback behavior note"
+  );
 
   // 4) Runtime defaults/env should match quickstart.
   assert(
@@ -72,6 +88,18 @@ async function main() {
   assert(
     includes(webPage, `NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001"`),
     "web default API base URL is not http://localhost:3001"
+  );
+  assert(
+    includes(webPage, "pending: true"),
+    "chat thread missing pending AI placeholder behavior"
+  );
+  assert(
+    includes(webPage, "typing-indicator"),
+    "chat thread missing typing indicator rendering"
+  );
+  assert(
+    includes(webPage, "(source: "),
+    "inline source citation formatter not present in web UI"
   );
   assert(includes(envExample, "PORT=3001"), ".env.example missing PORT=3001");
   assert(
@@ -97,6 +125,8 @@ async function main() {
   // 7) Sample documentation should not claim resumable ingestion when unsupported.
   assert(!includes(sampleDoc, "can resume if interrupted"), "data/sample.txt still claims resumable workflow");
   assert(!includes(runIngest, "can resume if interrupted"), "runIngest sample text still claims resumable workflow");
+  assert(!includes(sampleDoc, "Stream results to UI"), "data/sample.txt still claims streaming as future improvement");
+  assert(!includes(runIngest, "Stream results to UI"), "runIngest sample text still claims streaming as future improvement");
 
   console.log("✅ Contract checks passed");
 }

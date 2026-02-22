@@ -1,7 +1,7 @@
 "use client";
 import "../tracing";
 import "./page.css";
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect, type ReactNode } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 
@@ -22,9 +22,18 @@ const AlertIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
 );
 
+const TypingIndicator = () => (
+  <div className="typing-indicator" aria-label="AI is thinking">
+    <span />
+    <span />
+    <span />
+  </div>
+);
+
 type Message = {
   role: "user" | "ai";
   content: string;
+  pending?: boolean;
   sources?: Array<{
     ref?: number;
     id?: string;
@@ -71,6 +80,103 @@ export default function Home() {
 
       return labels.length > 0 ? ` (source: ${labels.join(", ")})` : group;
     });
+  }
+
+  function renderAiContent(content: string) {
+    const normalizedContent = content
+      // Break chained bullet ideas into separate lines.
+      .replace(/(\]|\)|\.|:)\s*-\s+(?=[A-Z])/g, "$1\n- ")
+      // Break chained numbered points into separate lines.
+      .replace(/(\]|\)|\.|:)\s*(\d+\.\s+)/g, "$1\n$2");
+
+    const lines = normalizedContent.split("\n");
+    const blocks: ReactNode[] = [];
+    let i = 0;
+    let key = 0;
+
+    const isHeading = (line: string) => /^#{1,3}\s+/.test(line);
+    const isBullet = (line: string) => /^[-*]\s+/.test(line);
+    const isNumbered = (line: string) => /^\d+\.\s+/.test(line);
+
+    while (i < lines.length) {
+      const line = lines[i].trim();
+
+      if (!line) {
+        i += 1;
+        continue;
+      }
+
+      const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const text = headingMatch[2].trim();
+        const tag = level === 1 ? "h3" : level === 2 ? "h4" : "h5";
+        blocks.push(
+          <div key={`ai-block-${key++}`} className={`ai-heading ${tag}`}>
+            {text}
+          </div>
+        );
+        i += 1;
+        continue;
+      }
+
+      if (isBullet(line)) {
+        const items: string[] = [];
+        while (i < lines.length && isBullet(lines[i].trim())) {
+          const rawItem = lines[i].trim().replace(/^[-*]\s+/, "");
+          const splitItems = rawItem
+            .split(/\s+-\s+(?=[A-Z])/)
+            .map((item) => item.trim())
+            .filter(Boolean);
+          if (splitItems.length > 0) {
+            items.push(...splitItems);
+          }
+          i += 1;
+        }
+        blocks.push(
+          <ul key={`ai-block-${key++}`} className="ai-list ai-list-ul">
+            {items.map((item, idx) => (
+              <li key={`ai-li-${key}-${idx}`}>{item}</li>
+            ))}
+          </ul>
+        );
+        continue;
+      }
+
+      if (isNumbered(line)) {
+        const items: string[] = [];
+        while (i < lines.length && isNumbered(lines[i].trim())) {
+          items.push(lines[i].trim().replace(/^\d+\.\s+/, ""));
+          i += 1;
+        }
+        blocks.push(
+          <ol key={`ai-block-${key++}`} className="ai-list ai-list-ol">
+            {items.map((item, idx) => (
+              <li key={`ai-ol-${key}-${idx}`}>{item}</li>
+            ))}
+          </ol>
+        );
+        continue;
+      }
+
+      let paragraph = line;
+      i += 1;
+      while (i < lines.length) {
+        const next = lines[i].trim();
+        if (!next || isHeading(next) || isBullet(next) || isNumbered(next)) break;
+        paragraph += ` ${next}`;
+        i += 1;
+      }
+
+      blocks.push(
+        <p key={`ai-block-${key++}`} className="ai-paragraph">
+          {paragraph}
+        </p>
+      );
+    }
+
+    if (blocks.length === 0) return <p className="ai-paragraph">{content}</p>;
+    return <div className="ai-rich-content">{blocks}</div>;
   }
 
   // Auto-scroll to bottom of chat
@@ -152,7 +258,7 @@ export default function Home() {
     setLoading(true);
 
     // Create placeholder for AI response
-    setMessages(prev => [...prev, { role: "ai", content: "" }]);
+    setMessages(prev => [...prev, { role: "ai", content: "", pending: true }]);
 
     const es = new EventSource(`${API_BASE}/api/routes/query-stream?q=${encodeURIComponent(q)}`);
 
@@ -166,6 +272,7 @@ export default function Home() {
         if (lastMsg && lastMsg.role === "ai") {
           newMsgs[lastMsgIndex] = {
             ...lastMsg,
+            pending: false,
             content: lastMsg.content + token
           };
         }
@@ -188,6 +295,7 @@ export default function Home() {
         if (lastMsg && lastMsg.role === "ai") {
           newMsgs[lastMsgIndex] = {
             ...lastMsg,
+            pending: false,
             content: formatInlineCitations(lastMsg.content, sources),
             sources,
           };
@@ -212,6 +320,7 @@ export default function Home() {
         if (lastMsg && lastMsg.role === "ai") {
           newMsgs[lastMsgIndex] = {
             ...lastMsg,
+            pending: false,
             content: lastMsg.content + "\n[Error: " + (event.data || "Connection failed") + "]"
           };
         }
@@ -313,9 +422,11 @@ export default function Home() {
               <div key={i} className={`message ${msg.role}`}>
                 <span className="message-role">{msg.role === 'user' ? 'You' : 'AI'}</span>
                 <div className="message-bubble">
-                  {msg.content}
+                  {msg.role === "ai"
+                    ? (msg.pending ? <TypingIndicator /> : renderAiContent(msg.content))
+                    : msg.content}
                 </div>
-                {msg.role === "ai" && msg.sources && msg.sources.length > 0 && (
+                {msg.role === "ai" && !msg.pending && msg.sources && msg.sources.length > 0 && (
                   <details className="message-citations">
                     <summary>Sources ({msg.sources.length})</summary>
                     <ul className="citation-list">

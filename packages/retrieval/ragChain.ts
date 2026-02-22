@@ -57,6 +57,11 @@ Use ONLY the provided context to answer the question below.
 Cite each grounded claim with [source:n] where n is the source index.
 If there is no relevant context to answer the question, answer exactly: "${NO_CONTEXT_FALLBACK}".
 Do not provide additional information beyond the provided context.
+Format the answer as clean Markdown for readability:
+- Use short section headers (## / ###) when the answer has multiple parts.
+- Prefer concise bullet points over dense paragraphs.
+- Keep each bullet focused on one idea.
+- Put citations at the end of the relevant bullet or sentence.
 
 Context:
 ${contextText}
@@ -83,7 +88,18 @@ function extractCitationIndexes(answer: string): number[] {
   return ordered;
 }
 
+function isNoContextAnswer(answer: string): boolean {
+  const normalized = answer.trim().toLowerCase();
+  if (!normalized) return true;
+  if (normalized === NO_CONTEXT_FALLBACK.toLowerCase()) return true;
+  return normalized.startsWith("i don't know");
+}
+
 function buildSources(contexts: RetrievedContext[], answer: string): RAGSource[] {
+  if (isNoContextAnswer(answer)) {
+    return [];
+  }
+
   const citationIndexes = extractCitationIndexes(answer);
   const indexesToUse =
     citationIndexes.length > 0

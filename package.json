@@ -6,7 +6,8 @@
   "scripts": {
     "ingest": "NODE_OPTIONS=\"--loader ts-node/esm\" ts-node -r dotenv/config packages/ingestion/runIngest.ts",
     "dev:api": "npx nodemon --watch apps/api --watch packages --ext ts,js,json --exec 'NODE_OPTIONS=\"--loader ts-node/esm\" ts-node -r dotenv/config apps/api/server.ts'",
-    "dev": "echo \"Start frontend and backend separately (see README)\""
+    "dev": "echo \"Start frontend and backend separately (see README)\"",
+    "test:contracts": "NODE_OPTIONS=\"--loader ts-node/esm\" ts-node scripts/test-contracts.ts"
   },
   "dependencies": {
     "@pinecone-database/pinecone": "^6.1.2",
