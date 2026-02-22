@@ -9,7 +9,10 @@ export type LoadedDocument = {
   metadata?: Record<string, unknown>;
 };
 
-export async function loadDocuments(filePaths: string[]): Promise<LoadedDocument[]> {
+export async function loadDocuments(
+  filePaths: string[],
+  opts?: { fileHashes?: Record<string, string> }
+): Promise<LoadedDocument[]> {
   const docs: LoadedDocument[] = [];
 
   for (const filePath of filePaths) {
@@ -17,7 +20,7 @@ export async function loadDocuments(filePaths: string[]): Promise<LoadedDocument
     const basename = path.basename(filePath);
 
     let content = "";
-    if (ext === ".txt") {
+    if (ext === ".txt" || ext === ".md") {
       content = await fs.readFile(filePath, "utf-8");
     } else if (ext === ".pdf") {
       const data = await fs.readFile(filePath);
@@ -31,8 +34,10 @@ export async function loadDocuments(filePaths: string[]): Promise<LoadedDocument
       throw new Error(`Unsupported file type: ${ext}`);
     }
 
-    // Calculate hash
-    const hash = await import("crypto").then(c => c.createHash("sha256").update(content).digest("hex"));
+    // Prefer canonical upload hash when available. Fall back to content hash.
+    const hash =
+      opts?.fileHashes?.[filePath] ??
+      await import("crypto").then((c) => c.createHash("sha256").update(content).digest("hex"));
 
     docs.push({
       id: basename,

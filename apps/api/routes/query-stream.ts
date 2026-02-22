@@ -14,7 +14,7 @@ type NextApiResponse<T = any> = import("http").ServerResponse & {
 };
 
 import { loadVectorStore } from "../../../packages/retrieval/vectorStoreLoader/index.js";
-import { streamAnswerQuery } from "../../../packages/retrieval/ragChain.js"; // Corrected import path
+import { streamAnswerQuery } from "../../../packages/retrieval/ragChain.js";
 
 export const config = {
   api: {
@@ -75,8 +75,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const stream = streamAnswerQuery(retriever, q, { topK: 3 });
 
-    for await (const chunk of stream) {
-      res.write(`event: token\ndata: ${JSON.stringify({ token: chunk })}\n\n`);
+    for await (const event of stream) {
+      if (event.type === "token") {
+        res.write(`event: token\ndata: ${JSON.stringify({ token: event.token })}\n\n`);
+      } else if (event.type === "sources") {
+        res.write(`event: sources\ndata: ${JSON.stringify({ sources: event.sources })}\n\n`);
+      }
     }
     res.write(`event: done\ndata: [DONE]\n\n`);
     res.end();

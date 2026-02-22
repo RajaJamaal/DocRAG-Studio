@@ -80,7 +80,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.log('[route:upload] Starting ingestion...');
         const graph = buildIngestionGraph();
         try {
-            const finalState = await graph.invoke({ filePaths: [filePath] });
+            const finalState = await graph.invoke({
+                filePaths: [filePath],
+                fileHashes: { [filePath]: fileHash },
+            });
             console.log('[route:upload] Ingestion complete');
             res.statusCode = 200;
             res.json?.({ success: true, state: finalState });

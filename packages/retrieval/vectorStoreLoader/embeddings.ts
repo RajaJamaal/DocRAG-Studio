@@ -17,9 +17,13 @@ export async function embedQuery(text: string): Promise<number[]> {
             modelName: "text-embedding-3-small",
             dimensions: 1024,
         });
-        const res = await embeddings.embedQuery(text);
-        console.log(`[embeddings] Generated embedding with dimension: ${res.length}`);
-        return res;
+        try {
+            const res = await embeddings.embedQuery(text);
+            console.log(`[embeddings] Generated embedding with dimension: ${res.length}`);
+            return res;
+        } catch (error) {
+            console.warn("[embeddings] OpenAI embedQuery failed, falling back to local embeddings:", error);
+        }
     }
     return localEmbedding(text);
 }

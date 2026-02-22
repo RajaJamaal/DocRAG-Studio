@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 // Load environment variables from .env file
 dotenv.config();
 
-const port = process.env.PORT ? Number(process.env.PORT) : 3000;
+const port = process.env.PORT ? Number(process.env.PORT) : 3001;
 
 async function loadHandler(pathname: string) {
   // Map '/api/routes/<name>' -> './routes/<name>.ts' or .js

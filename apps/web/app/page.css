@@ -81,6 +81,11 @@ h2 {
   background: rgba(148, 163, 184, 0.1);
 }
 
+.upload-panel .dropzone.drag-over {
+  border-color: rgba(96, 165, 250, 0.9);
+  background: rgba(59, 130, 246, 0.15);
+}
+
 .dropzone input {
   display: none;
 }
@@ -194,6 +199,23 @@ h2 {
   font-size: 0.75rem;
   color: #94a3b8;
   margin: 0 0.5rem;
+}
+
+.message-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+  max-width: 100%;
+}
+
+.source-chip {
+  border: 1px solid rgba(147, 197, 253, 0.3);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.15);
 }
 
 .input-area {

@@ -4,6 +4,7 @@ import crypto from "crypto";
 import type { VectorStoreLike, DocumentLike } from "./types.js";
 import type { Document } from "@langchain/core/documents";
 import { VECTOR_STORE_FILE, VECTOR_STORE_DIR } from "../../config/index.js";
+import { embedQuery } from "./embeddings.js";
 
 type StoredVector = {
     id: string;
@@ -16,19 +17,16 @@ function cosineSimilarity(a: number[], b: number[]) {
     let dot = 0;
     let na = 0;
     let nb = 0;
-    for (let i = 0; i < a.length; i++) {
-        dot += a[i] * b[i];
-        na += a[i] * a[i];
-        nb += b[i] * b[i];
+    const len = Math.min(a.length, b.length);
+    for (let i = 0; i < len; i++) {
+        const av = Number.isFinite(a[i]) ? a[i] : 0;
+        const bv = Number.isFinite(b[i]) ? b[i] : 0;
+        dot += av * bv;
+        na += av * av;
+        nb += bv * bv;
     }
     if (na === 0 || nb === 0) return 0;
     return dot / (Math.sqrt(na) * Math.sqrt(nb));
-}
-
-function embedTextDeterministic(text: string, dim = 32) {
-    const hash = crypto.createHash("sha256").update(text).digest();
-    const vec = Array.from({ length: dim }, (_, i) => hash[i % hash.length] / 255);
-    return vec;
 }
 
 export class LocalVectorStore implements VectorStoreLike {
@@ -81,7 +79,7 @@ export class LocalVectorStore implements VectorStoreLike {
     async similaritySearch(query: string, k = 3): Promise<DocumentLike[]> {
         await this.init();
         console.log('[LocalVectorStore] similaritySearch entry', { query, k });
-        const qVec = embedTextDeterministic(query, this.vectors[0]?.embedding.length ?? 32);
+        const qVec = await embedQuery(query);
 
         const scores = this.vectors.map((v) => ({
             score: cosineSimilarity(qVec, v.embedding),
@@ -96,12 +94,14 @@ export class LocalVectorStore implements VectorStoreLike {
         await this.init();
         console.log('[LocalVectorStore] addDocuments', documents.length);
 
-        const newVectors = documents.map(doc => ({
-            id: crypto.randomUUID(),
-            embedding: (doc.metadata?.embedding as number[]) || embedTextDeterministic(doc.pageContent),
-            text: doc.pageContent,
-            metadata: doc.metadata
-        }));
+        const newVectors = await Promise.all(
+            documents.map(async (doc) => ({
+                id: crypto.randomUUID(),
+                embedding: (doc.metadata?.embedding as number[]) || await embedQuery(doc.pageContent),
+                text: doc.pageContent,
+                metadata: doc.metadata
+            }))
+        );
 
         this.vectors.push(...newVectors);
 

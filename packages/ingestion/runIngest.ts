@@ -14,8 +14,8 @@ This is a sample document used to test the document ingestion pipeline. It demon
 3. Generating embeddings
 4. Storing vectors for retrieval
 
-The system supports PDF, DOCX, and plain text files. Each document is processed through
-a LangGraph workflow that can resume if interrupted.
+The system supports PDF, DOCX, Markdown, and plain text files. Each document is processed through
+a LangGraph workflow.
 
 Future improvements:
 - Add support for more file types

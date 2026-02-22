@@ -16,6 +16,7 @@ export class ChromaVectorStore implements VectorStoreLike {
 
     constructor() {
         const apiKey = process.env.CHROMA_API_KEY;
+        const apiUrl = process.env.CHROMA_API_URL;
         const tenant = process.env.CHROMA_TENANT || "default_tenant";
         const database = process.env.CHROMA_DATABASE || "default_database";
 
@@ -23,9 +24,14 @@ export class ChromaVectorStore implements VectorStoreLike {
             tenant,
             database,
         };
+        if (apiUrl) options.path = apiUrl;
+        if (apiKey) options.apiKey = apiKey;
 
         this.client = new ChromaClient(options);
-        this.collectionName = process.env.CHROMA_COLLECTION || "docrag-studio-collection";
+        this.collectionName =
+            process.env.CHROMA_COLLECTION ||
+            process.env.CHROMA_COLLECTION_NAME ||
+            "docrag-studio-collection";
     }
 
     private async getCollection() {

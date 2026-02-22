@@ -10,6 +10,7 @@ import type { LoadedDocument } from "../ingestion/loaders.js"; // Import LoadedD
 // Zod schema for the graph state
 const graphStateSchema = z.object({
   filePaths: z.array(z.string()),
+  fileHashes: z.record(z.string()).optional(),
   documents: z.array(
     z.object({
       id: z.string(),
@@ -29,7 +30,7 @@ type GraphState = z.infer<typeof graphStateSchema>;
 
 async function load(state: GraphState): Promise<Partial<GraphState>> {
   console.log("---LOADING DOCUMENTS---");
-  const documents = await loadDocuments(state.filePaths);
+  const documents = await loadDocuments(state.filePaths, { fileHashes: state.fileHashes });
   return { documents };
 }
 
@@ -55,6 +56,7 @@ export function buildIngestionGraph() {
   const workflow = new StateGraph<GraphState>({
     channels: {
       filePaths: { value: null },
+      fileHashes: { value: null },
       documents: { value: null },
       chunks: { value: null },
       processedChunks: { value: null },

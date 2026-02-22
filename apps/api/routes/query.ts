@@ -12,7 +12,7 @@ type NextApiResponse<T = any> = import("http").ServerResponse & {
   end: (data?: any) => void;
 };
 import { loadVectorStore } from "../../../packages/retrieval/vectorStoreLoader/index.js";
-import { answerQuery } from "../../../packages/retrieval/ragChain/index.js";
+import { answerQuery } from "../../../packages/retrieval/ragChain.js";
 
 const querySchema = z.object({
   q: z.string().min(1, "Query 'q' cannot be empty"),

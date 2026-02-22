@@ -3,7 +3,7 @@ import "../tracing";
 import "./page.css";
 import { useMemo, useState, useRef, useEffect } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 
 // Icons
 const UploadIcon = () => (
@@ -25,6 +25,11 @@ const AlertIcon = () => (
 type Message = {
   role: "user" | "ai";
   content: string;
+  sources?: Array<{
+    id?: string;
+    title?: string;
+    snippet?: string;
+  }>;
 };
 
 export default function Home() {
@@ -33,6 +38,7 @@ export default function Home() {
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [fileName, setFileName] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatHistoryRef = useRef<HTMLDivElement>(null);
@@ -45,8 +51,7 @@ export default function Home() {
     }
   }, [messages]);
 
-  async function handleUpload(e: any) {
-    const file = e.target.files[0];
+  async function uploadFile(file: File) {
     if (!file) return;
 
     setFileName(file.name);
@@ -73,6 +78,12 @@ export default function Home() {
       setUploadStatus("error");
       setStatusMessage((err as Error).message);
     }
+  }
+
+  async function handleUpload(e: any) {
+    const file = e.target.files[0];
+    if (!file) return;
+    await uploadFile(file);
   }
 
   const suggestions = useMemo(
@@ -133,6 +144,28 @@ export default function Home() {
       });
     });
 
+    es.addEventListener("sources", (event: MessageEvent) => {
+      const { sources } = JSON.parse(event.data) as {
+        sources?: Array<{ id?: string; title?: string; snippet?: string }>;
+      };
+
+      if (!Array.isArray(sources)) return;
+
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        const lastMsgIndex = newMsgs.length - 1;
+        const lastMsg = newMsgs[lastMsgIndex];
+
+        if (lastMsg && lastMsg.role === "ai") {
+          newMsgs[lastMsgIndex] = {
+            ...lastMsg,
+            sources,
+          };
+        }
+        return newMsgs;
+      });
+    });
+
     es.addEventListener("done", () => {
       setLoading(false);
       es.close();
@@ -173,14 +206,30 @@ export default function Home() {
           </div>
 
           <div
-            className="dropzone"
+            className={`dropzone ${isDragOver ? "drag-over" : ""}`}
             onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setIsDragOver(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragOver(false);
+              const droppedFile = e.dataTransfer.files?.[0];
+              if (droppedFile) {
+                void uploadFile(droppedFile);
+              }
+            }}
           >
             <div>
               <p style={{ fontWeight: 600, color: "#e2e8f0" }}>
                 {fileName || "Choose a file to upload"}
               </p>
-              <p className="muted">PDF, TXT, MD supported</p>
+              <p className="muted">PDF, DOCX, TXT, MD supported</p>
             </div>
             <div className="dropzone-button">
               <UploadIcon />
@@ -189,7 +238,7 @@ export default function Home() {
               ref={fileInputRef}
               type="file"
               onChange={handleUpload}
-              accept=".pdf,.txt,.md"
+              accept=".pdf,.docx,.txt,.md"
             />
           </div>
 
@@ -236,6 +285,15 @@ export default function Home() {
                 <div className="message-bubble">
                   {msg.content}
                 </div>
+                {msg.role === "ai" && msg.sources && msg.sources.length > 0 && (
+                  <div className="message-sources">
+                    {msg.sources.map((source, idx) => (
+                      <div key={`${source.id || source.title || "source"}-${idx}`} className="source-chip">
+                        {source.title || source.id || `source:${idx}`}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
